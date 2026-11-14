@@ -1,5 +1,5 @@
 {
-    "name": "superforge-basic",
+    "name": "superforge-starter",
     "private": true,
     "type": "module",
     "packageManager": "pnpm@10.17.0",

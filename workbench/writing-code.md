@@ -23,6 +23,27 @@ request-time logic (auth, redirects, headers) in front of one and expect it
 to run. A page that needs to change per request is client-rendered (`ssr:
 false` on its route) and left out of the prerender.
 
+### Headless
+
+**Every database read and write goes through the API under `/api`.** It's
+a rule, not a preference: the website calls the API through its typed
+client (`source/backend/client.ts`) with the visitor's session, and
+scripts, other apps and LLMs call it over HTTP with an API token, once
+there is one. So:
+
+- **Pages, route loaders and TanStack server functions never touch the
+  database**, and nothing in `frontend/` imports from `database/`. A page
+  that needs data asks the API, through TanStack Query.
+- **`database/` is imported only by `backend/`**, and by its own scripts
+  and tests.
+- **A feature is a route before it's a screen.** Anything a person can do
+  on the site, a script or an agent can do through the same route, with
+  the same checks.
+
+One way to the data means one place for the checks (zod), the
+authorization and the tests, and one API for the site, scripts and agents
+alike.
+
 ### Choosing where new code goes
 
 `source/` has four areas, and the line between the first two is the one that
@@ -57,9 +78,9 @@ matters:
   client in `source/backend/client.ts`, inside a TanStack Query
   `queryOptions` or `mutationOptions` in `source/frontend/queries/`, like
   `health.ts`. A group of routes is a Hono app of its own, in a file named
-  for what it's about (`backend/health.ts`), mounted in `index.ts`. Prefer
-  Hono over TanStack server functions: Hono routes are
-  plain HTTP, so a webhook, a script or another client can reach them too.
+  for what it's about (`backend/health.ts`), mounted in `index.ts`. Never a TanStack server function
+  ([Headless](#headless)): Hono routes are plain HTTP, so a webhook, a
+  script or an agent can reach them too.
   Check what comes in with zod. A route reads the database from
   `c.var.database`, never `appDatabase()` directly, so a test can hand it
   its own.
@@ -68,11 +89,12 @@ matters:
 - **A new React component** → `source/frontend/components/`, and a shadcn
   primitive in `components/primitives/` with `pnpm dlx shadcn@4 add
   <name>` (`components.json` says where).
-- **Something that deploys on its own** (Socket, a worker on a schedule) →
-  a second service in the Railway project (`.railway/railway.ts`), started
-  from this same package with its own start command, or a cron service with
-  a `cronSchedule`. Not a second package: one database means one
-  package.
+- **Something that runs in the background or on a schedule** → this
+  service first, as routes under `/api` and code beside them. A second
+  service in the Railway project (`.railway/railway.ts`), started from this
+  same package with its own start command, or a cron service with a
+  `cronSchedule`, only when something must deploy or scale on its own. Not
+  a second package: one database means one package.
 - **Content** lives where it's published: a page's copy in its route, and
   copy more than one page shares in `source/utilities/`.
 
@@ -477,12 +499,12 @@ When changing existing code and nobody mentioned backward compatibility:
 - **Unsure?** Stop and ask.
 - Never build in backward compatibility unless explicitly requested.
 
-The one exception is **a published URL**. A post's or project's URL is
-linked from YouTube descriptions and other sites, so renaming a slug or
+The one exception is **a published URL**. A page's address may be linked
+from emails, ads, other sites and search results, so renaming a slug or
 moving a route needs a redirect from the old path.
 
 ## Keeping this current
 
-If a convention here fights reality, apply the self-improvement rule in
-`CLAUDE.md`: fix it in place when the correction is small and certain,
-otherwise file a Notion task (`tracking-work.md`).
+If a convention here fights reality, fix it in place when the correction
+is small and certain, and otherwise tell the human what's wrong
+(`CLAUDE.md`, "Keep things current as you go").

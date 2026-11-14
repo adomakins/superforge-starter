@@ -30,8 +30,8 @@ export default defineRailway(() => {
 
     // The app: one Node server (source/node.ts), which deploys each push to
     // `main` once its CI passes (`checkSuites`)
-    const app = service("superforge-basic", {
-        source: github("adomakins/superforge-basic", {
+    const app = service("superforge-starter", {
+        source: github("adomakins/superforge-starter", {
             branch: "main",
             checkSuites: true
         }),
@@ -52,20 +52,24 @@ export default defineRailway(() => {
         // the database
         healthcheck: "/api/health",
         replicas: { [region]: 1 },
-        // Railway's CDN in front of every domain: the pages until the next
-        // deploy, which purges them (`purgeOnDeploy` defaults to `html`), and
+        // Railway's CDN in front of the app: the pages for a day at most, and
+        // only until the next deploy, which purges every page (`html`), and
         // the hashed assets for good, by the headers source/node.ts sends
         // (workbench/commit-and-deploy.md, "Caching"). Nothing under /api is
-        // kept.
-        cdn: { enabled: true },
+        // kept. `html` is Railway's default, written out so it can't change
+        // under us.
+        cdn: { enabled: true, purgeOnDeploy: "html" },
         env: {
             DATABASE_URL: ref(database, "DATABASE_URL")
         }
     })
-    // Railway's own address for the app. A custom domain joins it under
-    // `customDomains` (workbench/commit-and-deploy.md, "Domains").
+    // Railway's own address for the app, which the first apply makes with
+    // the service, since the CDN needs a public domain to start on. After
+    // that the file doesn't keep it: if it's deleted, the plan doesn't
+    // notice. A custom domain joins it under `customDomains`
+    // (workbench/commit-and-deploy.md, "Domains").
     app.networking = {
-        serviceDomains: { "superforge-basic-production.up.railway.app": {} }
+        serviceDomains: { "superforge-starter.up.railway.app": {} }
     }
 
     // `variables` is what the CLI reads to manage them, but the SDK's type
@@ -75,5 +79,5 @@ export default defineRailway(() => {
         variables: { managed: true },
         resources: [app, database]
     }
-    return project("superforge-basic", definition)
+    return project("superforge-starter", definition)
 })
