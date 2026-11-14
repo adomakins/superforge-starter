@@ -29,9 +29,10 @@ export default defineRailway(() => {
     database.networking = { privateNetworkEndpoint: "postgres" }
 
     // The app: one Node server (source/node.ts), which deploys each push to
-    // `main` once its CI passes (`checkSuites`)
-    const app = service("superforge-starter", {
-        source: github("adomakins/superforge-starter", {
+    // `main` once its CI passes (`checkSuites`). Named for what it is, so a
+    // copy keeps the name; the project and the repository are the business's.
+    const app = service("app", {
+        source: github("superforge-studio/starter-template", {
             branch: "main",
             checkSuites: true
         }),
