@@ -101,7 +101,8 @@ server.
 
 **The project's configuration is `.railway/railway.ts`**, Railway's
 infrastructure as code: the app service, its build, pre-deploy migrations,
-start, healthcheck, CDN and variables, and the Postgres database. Railway
+start, healthcheck, CDN and variables, and the Postgres database with its
+point-in-time recovery bucket. Railway
 doesn't read it as it deploys. `railway config plan` shows what applying it
 would change, and `railway config apply` changes it; CI applies it on each
 push (above), with the `RAILWAY_TOKEN` secret. **Change Railway in this
@@ -143,11 +144,24 @@ create tokens, change repository settings or touch DNS: the steps marked
    railway config apply
    ```
 
-   The first apply makes the service and its Postgres. Railway may make
+   The first apply makes the service and its Postgres, with point-in-time
+   recovery on (`writing-code.md`, "Restoring production"). Railway may make
    the database in its default region whatever `region` says, and leave
    Wait for CI off on the new service: run `railway config plan`, and if it
    shows either, `railway config apply --confirm-destructive` once more
-   (moving an empty database loses nothing).
+   (moving an empty database loses nothing). Then check that recovery is
+   on:
+
+   ```bash
+   railway postgres pitr status --service Postgres
+   ```
+
+   It says `Status: enabled` and `Bucket wired: yes`. Within about ten
+   minutes, the database's logs (`railway logs --service Postgres`) show
+   its first full backup end with `completed successfully`; until then
+   there's nothing to restore from. If the status says `disabled`, run
+   `railway postgres pitr enable --service Postgres`, then make
+   `.railway/railway.ts` match what it changed, so the plan is clean.
 4. **(The human)** A project token for the `production` environment (the
    project's Settings → Tokens on Railway), set as the repository secret
    that `railway-apply` uses:

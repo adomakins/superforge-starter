@@ -113,7 +113,7 @@ There's **one database, Postgres**, on Railway, queried with Drizzle
 | The tests use         | a database of each test's own, on the checkout's Postgres, in CI too        |
 | Checked in CI by      | `pnpm database:check`, the tests from empty, and the PR's upgrade test      |
 | Read by hand with     | `pnpm database:sql "<query>"`, or the database's Data tab on Railway        |
-| Restored with         | Railway's backups of the database's volume, in its dashboard                |
+| Restored with         | point-in-time recovery, to any moment in about the last four weeks (below)  |
 
 The conventions every table follows are in `schema.ts`'s header: named for
 what it hangs off, snake_case columns, uuids for our own rows, every
@@ -243,10 +243,42 @@ statement.
   tab. It's only on Railway's private network, so a script that writes to
   it runs on the app's service, with `railway ssh --service app --
   <command>`, which has `DATABASE_URL`.
-- **Restoring production** is Railway's: backups of the database's volume,
-  restored from its dashboard. Rolling back a deploy doesn't roll back a
-  migration, so a migration that committed and changed data wrongly comes
-  back from a backup, and loses every write since.
+
+### Restoring production
+
+**Production's database has point-in-time recovery**, from the first
+apply (`.railway/railway.ts`). Postgres sends every change to the
+`Postgres-PITR` bucket as it happens, with a full backup each week and a
+differential one each day, so it can be restored to any moment in about the
+last four weeks, starting from the first backup. Rolling back a deploy
+doesn't roll back a migration, so data a migration, a script or a person
+changed wrongly comes back this way, from the moment before, losing every
+write since.
+
+A restore moves production, so it's the human's to decide. It goes in four
+steps:
+
+1. **Restore into a new service**, which leaves the database as it is:
+
+   ```bash
+   railway postgres pitr restore --service Postgres --at 2026-11-20T15:04:00Z --new-service-name Postgres-restored
+   ```
+
+   The time is in UTC, or an offset back from now like `2h`.
+   `railway postgres pitr status --service Postgres` shows the range there
+   is to restore from, and the database's Backups tab on Railway does the
+   same with a date picker.
+2. **Check the restored data**, in the new service's Data tab, before
+   anything points at it.
+3. **Switch the app over in `.railway/railway.ts`**, in a PR: declare the
+   restored service, point the app's `DATABASE_URL` at it, and give it
+   point-in-time recovery as `Postgres` has it, with a bucket of its own,
+   since a restored database doesn't archive until it's turned on. Until the
+   file names the restored service, every push's apply fails, since it
+   would delete it, which CI refuses. Merging deploys the app against it.
+4. **Delete the old database last**, once nothing needs it, with the
+   destructive apply the human runs (`workbench/commit-and-deploy.md`, "CI
+   and deploys").
 
 ### Local development
 
