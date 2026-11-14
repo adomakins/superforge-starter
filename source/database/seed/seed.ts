@@ -22,7 +22,7 @@ import { localDatabaseUrl } from "@/database/local"
  * that breaks it fails `pnpm check`, not the next person's dev server.
  */
 
-type Seeder = (
+export type Seeder = (
     transaction: Database
 ) => Promise<{ table: string; rows: number }>
 
