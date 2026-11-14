@@ -33,8 +33,8 @@ merging" (0 approvals) and "Require status checks to pass" with `check`.
 - **Push or PR:** `pnpm format && pnpm check`. `pnpm check` is exactly what
   CI runs, its parts side by side as CI's jobs run them: biome in read-only
   mode, the migration check, the typecheck, the tests against the
-  checkout's own Postgres with the upgrade test, and the production build
-  with its prerender (`workbench/scripts/check.sh`). Run it before you push
+  checkout's own Postgres with the upgrade test, the production build with
+  its prerender, and the smoke test (`workbench/scripts/check.sh`). Run it before you push
   rather than finding out from CI.
 
 ## CI and deploys
@@ -43,14 +43,21 @@ merging" (0 approvals) and "Require status checks to pass" with `check`.
 `main`:
 
 - **`code`** and **`tests`** run `pnpm check` between them, side by side:
-  `code` is biome, the migration check, the typecheck and the build
-  (`check.sh code`), and `tests` the tests in two shards (`check.sh tests
+  `code` is biome, the migration check, the typecheck, the build and the
+  smoke test (`check.sh code`), and `tests` the tests in two shards (`check.sh tests
   1/2` and `2/2`), each on a Postgres of the runner's own from npm, as on a
   laptop, with the PR's base (or `main`, on a push) as the upgrade test's:
   the base's migrations, sample rows in every table, then the PR's
   (`source/database/tests/upgrade.test.ts`). A new `NOT NULL` column or
   unique index that existing rows break fails it, and so does a migration
   the deploy would skip.
+- **The smoke test** (`workbench/scripts/smoke-test.mjs`, the end of
+  `code`) does with the build what a deploy does, on a new database of its
+  own: `pnpm database:migrate` from empty, `pnpm start`, then
+  `/api/health`, every prerendered page, a hashed asset and a missing page,
+  each with the status and cache header `source/node.ts` promises. So a
+  start that crashes, a migration that won't apply from empty, or a broken
+  cache header fails the PR, not the deploy.
 - **`check`** is the gate: it passes once `code` and every shard of `tests`
   have. A failure shows on the PR and on the commit. Read why with
   `gh run list --limit 5` and `gh run view <id> --log-failed`. The `main`
@@ -62,6 +69,19 @@ merging" (0 approvals) and "Require status checks to pass" with `check`.
   the PR's own code. So a PR shows no preview of what it changes on
   Railway: the human runs `railway config plan` in a checkout linked with
   `railway link`, and an agent sees a change once it merges.
+
+**The workflow holds itself to a few rules**: its token can only read the
+code (`permissions`), each job stops after 15 minutes rather than GitHub's
+six hours, and a new push to a PR's branch cancels the run on the push
+before it (`concurrency`), while pushes to `main` each run to the end, in
+order. It reads Node's version from `engines` in `package.json`, as
+Railway does, so the two can't drift.
+
+**Dependabot** (`.github/dependabot.yml`) opens a PR a month for what's out
+of date: one for GitHub's actions, one for every dependency's minor and
+patch releases, and one each for a major release. Each passes `check`
+before it can merge, like any PR. Security fixes come as soon as there's
+one, once Dependabot security updates are on (Settings → Code security).
 
 **Railway deploys each push to `main`** through its GitHub connection,
 once that push's whole CI run has passed (Wait for CI: `checkSuites` in

@@ -232,6 +232,13 @@ statement.
   checkout's database.
 - **`pnpm database:reset`** deletes the checkout's database and migrates a
   new one from empty.
+- **`pnpm database:seed`** puts sample rows in it, to try things out on
+  (`source/database/seed/seed.ts`, run by `workbench/scripts/seed.mjs`
+  through Vite's module runner, so it can use the `@/` paths). Each table
+  that wants sample rows gets a seeder there, written out by hand, which
+  replaces its rows, so seeding again is safe. Its test seeds an empty
+  database, so a schema change that breaks it fails `pnpm check`. There
+  are none until the first table.
 - **Production's** is in Railway's dashboard: the Postgres service's Data
   tab. It's only on Railway's private network, so a script that writes to
   it runs on the app's service, with `railway ssh --service <service> --
@@ -283,7 +290,9 @@ on it.
   accident.
 - **`pnpm preview`** runs the production build (`pnpm build` first) as
   Railway does, `source/node.ts` and all, on the checkout's database, at
-  http://localhost:3001.
+  http://localhost:3001. **`pnpm smoke-test`** does it on a new, empty
+  database instead, migrating it first, and checks every page and the
+  cache headers, as `pnpm check` and CI do (`workbench/scripts/smoke-test.mjs`).
 
 ## The verification loop
 
@@ -292,6 +301,7 @@ pnpm format       # biome: format, lint, organize imports
 pnpm typecheck    # tsc --noEmit
 pnpm test         # vitest, in Node, against the checkout's own Postgres
 pnpm dev          # http://localhost:3000
+pnpm smoke-test   # the build (pnpm build first), migrated, started and probed as Railway runs it
 pnpm check        # exactly what CI runs, its parts side by side (workbench/scripts/check.sh)
 ```
 

@@ -1,0 +1,24 @@
+# Dependabot opens a pull request a month for what's out of date: one for
+# GitHub's actions, one for the dependencies' minor and patch releases, and
+# one each for a major release, which may need code changes. Each runs CI
+# like any PR, so it merges only once `check` passes on it. A security fix
+# comes as soon as there is one, once Dependabot security updates are on in
+# the repository's settings (Settings → Code security).
+version: 2
+updates:
+    - package-ecosystem: github-actions
+      directory: /
+      schedule:
+          interval: monthly
+      groups:
+          actions:
+              patterns: ["*"]
+
+    - package-ecosystem: npm
+      directory: /
+      schedule:
+          interval: monthly
+      groups:
+          dependencies:
+              patterns: ["*"]
+              update-types: [minor, patch]

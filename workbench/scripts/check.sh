@@ -5,8 +5,9 @@
 #
 #   code       biome, read-only (formatting, lint and imports); the
 #              migrations: the journal's order, and squawk
-#              (check-migrations.sh); the typecheck; and the production
-#              build, with its prerender
+#              (check-migrations.sh); the typecheck; the production build,
+#              with its prerender; and the smoke test: the build migrated,
+#              started and probed the way Railway runs it (smoke-test.mjs)
 #   tests      the tests, on this checkout's Postgres (source/database/local/),
 #              the upgrade test among them: the branch's migrations over the
 #              base branch's, with rows in between
@@ -71,6 +72,9 @@ code() {
 
     step "Build"
     pnpm exec vite build
+
+    step "Smoke test: the build, as Railway runs it"
+    node workbench/scripts/smoke-test.mjs
 }
 
 tests() {

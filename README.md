@@ -35,8 +35,9 @@ workbench/       docs and scripts for working on the repo
 
 ```bash
 pnpm install
-pnpm dev          # http://localhost:3000, on this checkout's own Postgres
-pnpm check        # everything CI runs: biome, the migration check, typecheck, the tests, the build
+pnpm dev            # http://localhost:3000, on this checkout's own Postgres
+pnpm database:seed  # sample rows in it, to try things on
+pnpm check          # everything CI runs: biome, the migrations, typecheck, the tests, the build and a smoke test of it
 ```
 
 There's nothing to set up besides `pnpm install` (Node 22 and pnpm 10): no
