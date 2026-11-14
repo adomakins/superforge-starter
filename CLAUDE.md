@@ -48,7 +48,7 @@ An `AGENTS.md` at the root points Codex and Cursor here.
 - **`public/`** — static files served as-is from the site root, like `favicon.svg`.
 - **`workbench/`** — docs and scripts for working on the repo (above). `scripts/check.sh` is `pnpm check`, whose two parts, `code` and `tests`, it runs side by side as CI does; `check-migrations.sh` and `upgrade-test.sh` check the migrations; `smoke-test.mjs` runs the build as Railway does and probes it; `seed.mjs` runs the seed.
 - **`.github/workflows/ci.yml`** — CI: `code` (with the smoke test) and the tests in two shards, side by side, behind the `check` gate, on every PR and push to `main`; then on a push, `railway config apply`, the one job with production's Railway token. Railway deploys each push to `main` itself, once this whole run passes. `dependabot.yml` opens a PR a month for what's out of date.
-- **`.railway/`** — the Railway project as code (`railway.ts`): the app service, its build, pre-deploy migrations, start, healthcheck, CDN and variables, and the Postgres database. CI applies it; change Railway there, not in the dashboard.
+- **`.railway/`** — the Railway project as code (`railway.ts`): the app service, its build, pre-deploy migrations, start, healthcheck, CDN and variables, and the Postgres database with its point-in-time recovery bucket, `Postgres-PITR` (restoring it is in `workbench/writing-code.md`). CI applies it; change Railway there, not in the dashboard.
 - **`START-HERE.md`** — the onboarding that makes this codebase a business's own. `PRODUCT.md` and `DESIGN.md`, which it writes, hold the business and its look.
 
 ### Keeping this list current

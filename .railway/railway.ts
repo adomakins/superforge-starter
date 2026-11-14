@@ -1,4 +1,5 @@
 import {
+    bucket,
     defineRailway,
     github,
     postgres,
@@ -27,6 +28,26 @@ export default defineRailway(() => {
     // (source/database/). Railway gives it its volume.
     const database = postgres("Postgres", { region })
     database.networking = { privateNetworkEndpoint: "postgres" }
+
+    // The database's point-in-time recovery: Postgres sends every change
+    // (its WAL) to this bucket as it happens, with a full backup each week
+    // and a differential one each day, so it can be restored to any moment
+    // in about the last four weeks, as a new service beside this one
+    // (workbench/writing-code.md, "Restoring production"). Railway's
+    // Postgres image archives whenever the `WAL_ARCHIVE_*` variables are set,
+    // so these are what turn it on, from the first apply. They're the ones
+    // `railway postgres pitr enable` sets (read from superforge's on
+    // 2026-11-14). The bucket is in iad, beside the app's us-east4, where
+    // Railway puts it.
+    const recoveryArchive = bucket("Postgres-PITR", { region: "iad" })
+    database.variables = {
+        WAL_ARCHIVE_BUCKET: ref(recoveryArchive, "BUCKET"),
+        WAL_ARCHIVE_ENDPOINT: ref(recoveryArchive, "ENDPOINT"),
+        WAL_ARCHIVE_REGION: ref(recoveryArchive, "REGION"),
+        WAL_ARCHIVE_KEY: ref(recoveryArchive, "ACCESS_KEY_ID"),
+        WAL_ARCHIVE_SECRET: ref(recoveryArchive, "SECRET_ACCESS_KEY"),
+        WAL_ARCHIVE_PATH: { type: "literal", value: "/pgbackrest" }
+    }
 
     // The app: one Node server (source/node.ts), which deploys each push to
     // `main` once its CI passes (`checkSuites`). Named for what it is, so a
@@ -78,7 +99,7 @@ export default defineRailway(() => {
     // which TypeScript checks without refusing the extra key
     const definition = {
         variables: { managed: true },
-        resources: [app, database]
+        resources: [app, database, recoveryArchive]
     }
     return project("superforge-starter", definition)
 })
