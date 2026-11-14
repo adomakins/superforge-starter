@@ -7,8 +7,9 @@
 # `check` is the gate: it passes once `code` and every shard of `tests`
 # have, which between them run `pnpm check` (workbench/scripts/check.sh), so
 # a branch that passes it on a laptop passes it here. `code` is biome, the
-# migration check (the journal and squawk), typecheck and the production
-# build (which runs the prerender); `tests` is the tests in two shards, on a
+# migration check (the journal and squawk), typecheck, the production build
+# (which runs the prerender) and the smoke test (the build migrated, started
+# and probed as Railway runs it); `tests` is the tests in two shards, on a
 # Postgres of each runner's own, which `pnpm install` brings
 # (source/database/local/), the upgrade test among them (the PR's migrations
 # over the base branch's, on a database with rows in it). They run side by
@@ -30,15 +31,28 @@ on:
     push:
         branches: [main]
 
+# What every job's GITHUB_TOKEN may do: read the code, nothing more
+permissions:
+    contents: read
+
+# A new push to a PR's branch stops the run on the push before it, which can
+# no longer merge. Pushes to main each run to the end, in order, since each
+# one deploys.
+concurrency:
+    group: ci-${{ github.event.pull_request.number || github.sha }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
     code:
         runs-on: ubuntu-latest
+        timeout-minutes: 15
         steps:
-            - uses: actions/checkout@v4
-            - uses: pnpm/action-setup@v4
-            - uses: actions/setup-node@v4
+            - uses: actions/checkout@v7
+            - uses: pnpm/action-setup@v6
+            - uses: actions/setup-node@v7
               with:
-                  node-version: 22
+                  # `engines.node` in package.json, as Railway reads it
+                  node-version-file: package.json
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: workbench/scripts/check.sh code
@@ -50,12 +64,14 @@ jobs:
             matrix:
                 shard: [1/2, 2/2]
         runs-on: ubuntu-latest
+        timeout-minutes: 15
         steps:
-            - uses: actions/checkout@v4
-            - uses: pnpm/action-setup@v4
-            - uses: actions/setup-node@v4
+            - uses: actions/checkout@v7
+            - uses: pnpm/action-setup@v6
+            - uses: actions/setup-node@v7
               with:
-                  node-version: 22
+                  # `engines.node` in package.json, as Railway reads it
+                  node-version-file: package.json
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: workbench/scripts/check.sh tests ${{ matrix.shard }}
@@ -67,6 +83,7 @@ jobs:
         needs: [code, tests]
         if: ${{ !cancelled() }}
         runs-on: ubuntu-latest
+        timeout-minutes: 5
         permissions: {}
         steps:
             - name: Whether the code and the tests passed
@@ -88,16 +105,18 @@ jobs:
         needs: check
         if: ${{ !cancelled() && github.event_name == 'push' && needs.check.result == 'success' }}
         runs-on: ubuntu-latest
+        timeout-minutes: 15
         # One at a time, in push order
         concurrency:
             group: railway-config
             cancel-in-progress: false
         steps:
-            - uses: actions/checkout@v4
-            - uses: pnpm/action-setup@v4
-            - uses: actions/setup-node@v4
+            - uses: actions/checkout@v7
+            - uses: pnpm/action-setup@v6
+            - uses: actions/setup-node@v7
               with:
-                  node-version: 22
+                  # `engines.node` in package.json, as Railway reads it
+                  node-version-file: package.json
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: npm install --global @railway/cli@5.71.0
