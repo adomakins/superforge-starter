@@ -1,0 +1,227 @@
+# Commit and deploy
+
+Read this before committing, opening a PR, or shipping anything.
+
+## Everything reaches `main` through a pull request
+
+Work on a branch, one per task, named for it:
+
+```bash
+git switch main && git pull
+git switch -c home-page-copy
+```
+
+Commit there as you go. **Push the branch and open the PR only when you're
+asked to ship** — until then the commits stay local. Commit path-limited,
+and check `git status --short` first so you don't sweep up someone else's
+uncommitted work:
+
+```bash
+git commit -F - -- source/frontend/routes/index.tsx README.md
+```
+
+Merging a PR is shipping it (below), so a ruleset on `main` keeps a broken
+build off production: it requires a pull request and a passing `check`,
+with no approvals (a solo developer can't approve their own PR). Setting
+it is the human's, once, in the repository's Settings → Rules → New
+branch ruleset: target `main`, and turn on "Require a pull request before
+merging" (0 approvals) and "Require status checks to pass" with `check`.
+
+## The two gates
+
+- **Local commit:** `pnpm format`, plus `pnpm typecheck` if code changed.
+- **Push or PR:** `pnpm format && pnpm check`. `pnpm check` is exactly what
+  CI runs, its parts side by side as CI's jobs run them: biome in read-only
+  mode, the migration check, the typecheck, the tests against the
+  checkout's own Postgres with the upgrade test, and the production build
+  with its prerender (`workbench/scripts/check.sh`). Run it before you push
+  rather than finding out from CI.
+
+## CI and deploys
+
+`.github/workflows/ci.yml` runs on every pull request and every push to
+`main`:
+
+- **`code`** and **`tests`** run `pnpm check` between them, side by side:
+  `code` is biome, the migration check, the typecheck and the build
+  (`check.sh code`), and `tests` the tests in two shards (`check.sh tests
+  1/2` and `2/2`), each on a Postgres of the runner's own from npm, as on a
+  laptop, with the PR's base (or `main`, on a push) as the upgrade test's:
+  the base's migrations, sample rows in every table, then the PR's
+  (`source/database/tests/upgrade.test.ts`). A new `NOT NULL` column or
+  unique index that existing rows break fails it, and so does a migration
+  the deploy would skip.
+- **`check`** is the gate: it passes once `code` and every shard of `tests`
+  have. A failure shows on the PR and on the commit. Read why with
+  `gh run list --limit 5` and `gh run view <id> --log-failed`. The `main`
+  ruleset requires it, by its name.
+- **`railway-apply`**, on a push, runs `railway config apply --yes` once
+  `check` passes. It's the only job with production's token, so only
+  merged code runs with it: a project token can do anything in its
+  environment, read production's secrets among it, and a job on a PR runs
+  the PR's own code. So a PR shows no preview of what it changes on
+  Railway: the human runs `railway config plan` in a checkout linked with
+  `railway link`, and an agent sees a change once it merges.
+
+**Railway deploys each push to `main`** through its GitHub connection,
+once that push's whole CI run has passed (Wait for CI: `checkSuites` in
+`.railway/railway.ts`), so its configuration is applied before its code
+deploys, and a push whose `check` or apply fails doesn't deploy. It builds
+with `pnpm build` (Railpack, on Node 22 from `engines` in `package.json`),
+then runs `pnpm database:migrate` before the new deployment starts, while
+the one before still serves (`source/database/migrate.ts`): every pending
+migration in one transaction, with a 10-second lock timeout. One that fails
+rolls back, and Railway stops the deploy with the current version still
+serving. Then it starts `pnpm start` (`source/node.ts`), and moves traffic
+to the new deployment only once `/api/health` answers, which needs the
+database, so one that doesn't start never serves. The old one gets SIGTERM,
+finishes its requests and exits. Read a deployment's logs with `railway
+logs`, in a checkout linked with `railway link`, or with the Railway MCP
+server.
+
+**The project's configuration is `.railway/railway.ts`**, Railway's
+infrastructure as code: the app service, its build, pre-deploy migrations,
+start, healthcheck, CDN and variables, and the Postgres database. Railway
+doesn't read it as it deploys. `railway config plan` shows what applying it
+would change, and `railway config apply` changes it; CI applies it on each
+push (above), with the `RAILWAY_TOKEN` secret. **Change Railway in this
+file, not the dashboard.** Each push's apply puts back any setting the file
+says otherwise, and the file owns every service variable: one set only in
+the dashboard is a deletion the apply refuses, which fails the push and
+skips its deploy. A secret goes in as `preserve()`, which keeps the value
+set in the dashboard.
+
+The apply refuses any destructive change (deleting a service, a volume or a
+variable), since CI runs it without `--confirm-destructive`. When a PR means
+one, the human applies it by hand once the PR merges, with `railway config
+apply --confirm-destructive` in a checkout linked with `railway link`, then
+re-runs the failed job so the push deploys.
+
+**There is no manual deploy.** Production's code only changes by merging a
+PR, so every deploy has passed `check` first. The one other way a version
+goes out is a variable changing in Railway, which redeploys the running
+code with it.
+
+## Setting up Railway
+
+Once per copy of this codebase, before its first deploy. Agents don't
+create tokens, change repository settings or touch DNS: the steps marked
+**(the human)** are the owner's, and an agent says what's needed and waits.
+
+1. **(The human)** A Railway account on the Hobby or Pro plan, with
+   Railway's GitHub app allowed to read this repository (railway.com →
+   Account Settings → GitHub).
+2. Name things for the business in `.railway/railway.ts` (`START-HERE.md`,
+   step 5): the project, the service, `github("<owner>/<repository>")`, and
+   the service domain, `<service>-production.up.railway.app`.
+3. Make the project, from the repository's root, logged in with `railway
+   login`:
+
+   ```bash
+   railway init --name <project>
+   railway config apply
+   ```
+
+   The first apply makes the service and its Postgres. Railway may make
+   the database in its default region whatever `region` says, and leave
+   Wait for CI off on the new service: run `railway config plan`, and if it
+   shows either, `railway config apply --confirm-destructive` once more
+   (moving an empty database loses nothing). If the service domain doesn't
+   exist yet, `railway domain --service <service>` makes it.
+4. **(The human)** A project token for the `production` environment (the
+   project's Settings → Tokens on Railway), set as the repository secret
+   that `railway-apply` uses:
+
+   ```bash
+   gh secret set RAILWAY_TOKEN
+   ```
+
+   It asks for the value, so it never lands in the shell's history. **Until
+   it's set, and whenever it's revoked or expires, `railway-apply` fails on
+   every push, so Railway deploys nothing** (Wait for CI): set it, then
+   re-run the failed job (`gh run rerun <id> --failed`) and the push
+   deploys.
+5. **(The human)** The `main` ruleset (above).
+6. Merge to `main`. The push's CI applies the configuration, and Railway
+   deploys it. Open the service domain: the home page loads, and its
+   status line (on the placeholder page) says the server and database are
+   up.
+
+Nothing for cloud agents: an agent needs no credential to develop, test or
+run `pnpm check`, since `pnpm dev` and the tests run against the checkout's
+own Postgres, which `pnpm install` brings.
+
+## Domains
+
+The app answers at Railway's address for it, declared in
+`.railway/railway.ts` as the app's `networking.serviceDomains`. A custom
+domain joins it under `customDomains`.
+
+**The file can keep a custom domain but can't create one**: `railway
+config plan` refuses a new name under `customDomains`. Add it first with
+`railway domain <name> --service <service>`, which prints the two DNS
+records it needs, then declare it in the file in the same change, so the
+next apply keeps it rather than deleting it.
+
+**(The human)** adds those records where the domain's DNS is: a CNAME (at
+the apex, `@`, for a bare domain; most DNS hosts flatten it) to the
+service's `*.up.railway.app` target, and a TXT record at `_railway-verify`.
+On Cloudflare, make the CNAME **DNS only (gray cloud), not proxied**, so
+Railway's CDN is the one cache in front of the app. Railway issues the
+certificate within minutes; `railway domain status <id>` shows it.
+
+## Caching
+
+Railway's CDN serves the app at the edge (`cdn` in `.railway/railway.ts`,
+<https://docs.railway.com/networking/cdn>), and `source/node.ts` says what
+it, and browsers, may keep:
+
+| What                                         | `Cache-Control`                        | Kept by the edge      |
+| -------------------------------------------- | -------------------------------------- | --------------------- |
+| The hashed build files, under `/assets/`     | `public, max-age=31536000, immutable`  | for good              |
+| The prerendered pages                        | `public, max-age=0, s-maxage=31536000` | until the next deploy |
+| Anything else in `public/`, like the favicon | `public, max-age=0, s-maxage=3600`     | an hour               |
+| `/api/*`, and anything rendered on request   | `no-store`                             | never                 |
+
+**Each deploy purges every page from the edge** (`purgeOnDeploy`, whose
+default is `html`), so there's no purge job. The assets stay, so a page
+still open across a deploy can fetch the old ones it asks for. Browsers ask
+for a page again on every visit (`max-age=0`), and the edge answers. A
+changed favicon takes up to an hour to show; `railway cdn purge all` clears
+it sooner. A page that shows something different to each person mustn't be
+prerendered, and its response must say `private` or `no-store`.
+
+To see what the edge did, read a response's `x-cache` header (`HIT`,
+`MISS`, `STALE`, or `DYNAMIC` for what it doesn't keep):
+
+```bash
+curl -sI https://<domain>/ | grep -i -E "x-cache|cache-control|age"
+```
+
+## Pull requests
+
+When you're asked to ship, push the branch and open the PR with
+`gh pr create`:
+
+- **Title it with what changed**, by area: `website: the services page`,
+  `api: book a call`, `database: customers`.
+- **Put anything the human has to do around the merge in the body**: a
+  secret to set, a DNS record, a destructive apply to run.
+- **Call out a changed URL**: a renamed page breaks links to it unless it
+  redirects.
+- **Watch `check`** with `gh pr checks --watch`, and fix anything it finds.
+  Merge only when the human says to (`gh pr merge --merge`), then
+  `git switch main && git pull`.
+
+## Variables and secrets
+
+The server's configuration is Railway variables on the app's service,
+named in `.railway/railway.ts`: `DATABASE_URL` (a reference to the
+database's), and any secret as `preserve()`, whose value the human sets in
+Railway's dashboard. A new one goes in the file first, since the file owns
+every variable on the service (above), and a new secret is named in the PR
+so the human sets it before the merge. Never put a secret's value in the
+file, and never commit one: `.env*` is ignored for that reason.
+
+A dev server needs none of them: it uses the checkout's own Postgres, and
+reads anything else from the shell that started it.

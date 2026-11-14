@@ -1,0 +1,30 @@
+.DS_Store
+
+# Secrets
+.env*
+!.env.example
+
+# Editors (per-machine, not shared)
+.vscode/
+.idea/
+.cursor/
+
+# Claude Code local state (launch.json is shared; these are per-machine)
+.claude/settings.local.json
+.claude/worktrees/
+
+# Dependencies
+node_modules/
+
+# This checkout's own Postgres: its data, port and log
+# (source/database/local)
+.postgres/
+
+# Builds
+output/
+.tanstack/
+.output/
+*.tsbuildinfo
+
+# Design-hook cache (per-machine)
+.impeccable/

@@ -1,0 +1,15 @@
+# Not a workspace: the repo is one package. pnpm reads its settings from
+# this file, and these are the dependencies whose build scripts may run.
+allowBuilds:
+    esbuild: true
+    lightningcss: true
+    sharp: true
+    squawk-cli: true
+
+# pnpm 10 runs no dependency build scripts unless they're listed here.
+# allowBuilds above is pnpm 11's spelling; keep both until the repo moves.
+onlyBuiltDependencies:
+    - esbuild
+    - lightningcss
+    - sharp
+    - squawk-cli

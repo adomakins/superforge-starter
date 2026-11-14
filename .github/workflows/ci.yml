@@ -1,0 +1,112 @@
+# Checks every pull request and every push to main, and applies the Railway
+# project's configuration. Railway deploys each push to main itself, once this
+# whole workflow has passed on it (`checkSuites` in .railway/railway.ts), so
+# a push's configuration is applied before its code deploys, and a push
+# whose check or apply fails doesn't deploy.
+#
+# `check` is the gate: it passes once `code` and every shard of `tests`
+# have, which between them run `pnpm check` (workbench/scripts/check.sh), so
+# a branch that passes it on a laptop passes it here. `code` is biome, the
+# migration check (the journal and squawk), typecheck and the production
+# build (which runs the prerender); `tests` is the tests in two shards, on a
+# Postgres of each runner's own, which `pnpm install` brings
+# (source/database/local/), the upgrade test among them (the PR's migrations
+# over the base branch's, on a database with rows in it). They run side by
+# side. A failure shows on the PR and the commit, and an agent can read the
+# full log with `gh run view <id> --log-failed`.
+#
+# `railway-apply` applies .railway/railway.ts on each push, after `check`,
+# with one repository secret, RAILWAY_TOKEN: a project token for the
+# `production` environment. It's the only job that gets it, so only merged
+# code runs with it: a project token can do anything in its environment,
+# reading production's secrets among it, and a job on a PR runs the PR's own
+# code. The apply refuses a destructive change (deleting a service, a volume
+# or a variable), which a human applies by hand
+# (workbench/commit-and-deploy.md, "CI and deploys").
+name: CI
+
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+jobs:
+    code:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: workbench/scripts/check.sh code
+
+    tests:
+        strategy:
+            # Every shard runs to the end, so one run shows every failure
+            fail-fast: false
+            matrix:
+                shard: [1/2, 2/2]
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: workbench/scripts/check.sh tests ${{ matrix.shard }}
+              env:
+                  # The upgrade test's base: the PR's, or main on a push
+                  UPGRADE_FROM: origin/${{ github.base_ref || 'main' }}
+
+    check:
+        needs: [code, tests]
+        if: ${{ !cancelled() }}
+        runs-on: ubuntu-latest
+        permissions: {}
+        steps:
+            - name: Whether the code and the tests passed
+              run: |
+                  if [ "$CODE" = success ] && [ "$TESTS" = success ]; then
+                      echo "The code and every shard of the tests passed"
+                  else
+                      echo "::error::code: $CODE, tests: $TESTS"
+                      exit 1
+                  fi
+              env:
+                  CODE: ${{ needs.code.result }}
+                  TESTS: ${{ needs.tests.result }}
+
+    # Applies .railway/railway.ts on each push, once `check` passes, against
+    # the live project as it stands then. Without --confirm-destructive it
+    # fails on a destructive change, so Railway skips deploying the push.
+    railway-apply:
+        needs: check
+        if: ${{ !cancelled() && github.event_name == 'push' && needs.check.result == 'success' }}
+        runs-on: ubuntu-latest
+        # One at a time, in push order
+        concurrency:
+            group: railway-config
+            cancel-in-progress: false
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: npm install --global @railway/cli@5.71.0
+            - name: Apply .railway/railway.ts
+              run: |
+                  if [ -z "$RAILWAY_TOKEN" ]; then
+                      echo "::error::The RAILWAY_TOKEN secret isn't set: a project token for Railway's production environment"
+                      exit 1
+                  fi
+                  railway config apply --yes
+              env:
+                  RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}

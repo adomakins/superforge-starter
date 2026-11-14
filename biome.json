@@ -1,0 +1,63 @@
+{
+    "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+    "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+    "files": {
+        "includes": ["**", "!source/frontend/routeTree.gen.ts", "!**/*.css"]
+    },
+    "formatter": {
+        "enabled": true,
+        "indentStyle": "space",
+        "indentWidth": 4,
+        "lineEnding": "lf",
+        "lineWidth": 80
+    },
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "preset": "recommended",
+            "suspicious": { "noExplicitAny": "error" },
+            "style": { "useImportType": "error" }
+        }
+    },
+    "javascript": {
+        "formatter": {
+            "quoteStyle": "double",
+            "jsxQuoteStyle": "double",
+            "trailingCommas": "none",
+            "semicolons": "asNeeded",
+            "arrowParentheses": "always"
+        }
+    },
+    "assist": {
+        "enabled": true,
+        "actions": { "source": { "organizeImports": "on" } }
+    },
+    "overrides": [
+        {
+            "includes": ["source/frontend/components/primitives/**"],
+            "linter": {
+                "rules": {
+                    "a11y": {
+                        "noLabelWithoutControl": "off",
+                        "noNoninteractiveTabindex": "off",
+                        "noRedundantRoles": "off",
+                        "useFocusableInteractive": "off",
+                        "useKeyWithClickEvents": "off",
+                        "useSemanticElements": "off"
+                    },
+                    "correctness": {
+                        "noComponentHookFactories": "off",
+                        "noUnusedImports": { "level": "error", "fix": "safe" },
+                        "useExhaustiveDependencies": "off"
+                    },
+                    "security": { "noDangerouslySetInnerHtml": "off" },
+                    "suspicious": {
+                        "noArrayIndexKey": "off",
+                        "noDocumentCookie": "off",
+                        "noDoubleEquals": "off"
+                    }
+                }
+            }
+        }
+    ]
+}

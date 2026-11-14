@@ -1,0 +1,20 @@
+# squawk (https://squawkhq.com), which lints every migration in
+# source/database/migrations as part of `pnpm database:check`
+# (workbench/scripts/check-migrations.sh), for locks that hold up the app
+# and changes the version still serving can't survive.
+
+# Drizzle applies every pending migration in one transaction
+# (source/database/migrate.ts), so squawk reads each as running inside one
+assume_in_transaction = true
+
+pg_version = "18"
+
+excluded_rules = [
+    # Our integers are counts and small numbers, not ids, which are uuids
+    "prefer-bigint-over-int",
+    "prefer-bigint-over-smallint",
+    "prefer-identity",
+    # The migration's connection sets lock_timeout and statement_timeout
+    # itself (MIGRATION_SETTINGS in source/database/migrate.ts)
+    "require-timeout-settings",
+]
