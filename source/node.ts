@@ -26,15 +26,16 @@ const built: { default: ServerEntry } = await import(
  * those for good. The rest, the prerendered pages among them, a browser
  * asks for again on each visit (`max-age=0`), so it never holds a page that
  * points at /assets a deploy has replaced, while the edge keeps them
- * (`s-maxage`): a page until the next deploy, which purges every page from
- * the edge, and anything else, like the favicon, for an hour, since a
- * deploy leaves those.
+ * (`s-maxage`): a page for a day, or until the next deploy, which purges
+ * every page from the edge, and anything else, like the favicon, for an
+ * hour, since a deploy leaves those. A day, not a year, so a purge that
+ * misses can't leave an old page at the edge for long.
  */
 function cacheControl(request_path: string, file: string) {
     if (request_path.startsWith("/assets/")) {
         return "public, max-age=31536000, immutable"
     } else if (file.endsWith(".html")) {
-        return "public, max-age=0, s-maxage=31536000"
+        return "public, max-age=0, s-maxage=86400"
     } else {
         return "public, max-age=0, s-maxage=3600"
     }

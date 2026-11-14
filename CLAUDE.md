@@ -34,7 +34,9 @@ There is no separate planning, reporting, or review phase, and no status docs in
 
 ## Project Architecture
 
-This is **one TanStack Start app, in a single pnpm package**, deployed as one Node server on Railway, on one Postgres. There is no monorepo: the pages and the API ship together. A part that needs to deploy on its own later becomes a second Railway service in the same project, started from this same package.
+This is **one TanStack Start app, in a single pnpm package**, deployed as one Node server on Railway, on one Postgres. There is no monorepo: the pages and the API ship together. A part that needs to deploy on its own later becomes a second Railway service in the same project, started from this same package. **It's headless**: every database read and write goes through the Hono API under `/api`, never a page, a loader or a server function (`workbench/writing-code.md`, "Headless").
+
+An `AGENTS.md` at the root points Codex and Cursor here.
 
 - **`source/server.ts`** — Start's server entry, the one Vite builds into `output/server/` with everything it imports: `/api/*` to Hono, everything else to TanStack Start.
 - **`source/node.ts`** — the Node server Railway runs (`pnpm start`, after `pnpm build`): the client build's files first, every prerendered page among them, with what browsers and Railway's CDN may cache of each, then the built `server.ts` for everything else. Node runs it from source, so it imports only packages and the build.

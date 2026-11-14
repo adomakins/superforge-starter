@@ -112,8 +112,9 @@ create tokens, change repository settings or touch DNS: the steps marked
    Railway's GitHub app allowed to read this repository (railway.com →
    Account Settings → GitHub).
 2. Name things for the business in `.railway/railway.ts` (`START-HERE.md`,
-   step 5): the project, the service, `github("<owner>/<repository>")`, and
-   the service domain, `<service>-production.up.railway.app`.
+   step 5): the project, the service, `github("<owner>/<repository>")`,
+   and the service's Railway address, `<service>-production.up.railway.app`,
+   which has to be free across all of Railway.
 3. Make the project, from the repository's root, logged in with `railway
    login`:
 
@@ -126,8 +127,7 @@ create tokens, change repository settings or touch DNS: the steps marked
    the database in its default region whatever `region` says, and leave
    Wait for CI off on the new service: run `railway config plan`, and if it
    shows either, `railway config apply --confirm-destructive` once more
-   (moving an empty database loses nothing). If the service domain doesn't
-   exist yet, `railway domain --service <service>` makes it.
+   (moving an empty database loses nothing).
 4. **(The human)** A project token for the `production` environment (the
    project's Settings → Tokens on Railway), set as the repository secret
    that `railway-apply` uses:
@@ -143,7 +143,7 @@ create tokens, change repository settings or touch DNS: the steps marked
    deploys.
 5. **(The human)** The `main` ruleset (above).
 6. Merge to `main`. The push's CI applies the configuration, and Railway
-   deploys it. Open the service domain: the home page loads, and its
+   deploys it. Open the service's address: the home page loads, and its
    status line (on the placeholder page) says the server and database are
    up.
 
@@ -153,9 +153,13 @@ own Postgres, which `pnpm install` brings.
 
 ## Domains
 
-The app answers at Railway's address for it, declared in
-`.railway/railway.ts` as the app's `networking.serviceDomains`. A custom
-domain joins it under `customDomains`.
+The app answers at Railway's address for it, named in
+`.railway/railway.ts` as the app's `networking.serviceDomains`. The first
+apply makes it with the service, since Railway's CDN needs a public domain
+to start on (an apply without one fails, saying so). **After that the file
+doesn't keep it**: if it's deleted, the plan doesn't notice, and it comes
+back only from the service's Settings → Networking → Generate Domain. A
+custom domain joins it under `customDomains`.
 
 **The file can keep a custom domain but can't create one**: `railway
 config plan` refuses a new name under `customDomains`. Add it first with
@@ -176,15 +180,15 @@ Railway's CDN serves the app at the edge (`cdn` in `.railway/railway.ts`,
 <https://docs.railway.com/networking/cdn>), and `source/node.ts` says what
 it, and browsers, may keep:
 
-| What                                         | `Cache-Control`                        | Kept by the edge      |
-| -------------------------------------------- | -------------------------------------- | --------------------- |
-| The hashed build files, under `/assets/`     | `public, max-age=31536000, immutable`  | for good              |
-| The prerendered pages                        | `public, max-age=0, s-maxage=31536000` | until the next deploy |
-| Anything else in `public/`, like the favicon | `public, max-age=0, s-maxage=3600`     | an hour               |
-| `/api/*`, and anything rendered on request   | `no-store`                             | never                 |
+| What                                         | `Cache-Control`                       | Kept by the edge                |
+| -------------------------------------------- | ------------------------------------- | ------------------------------- |
+| The hashed build files, under `/assets/`     | `public, max-age=31536000, immutable` | for good                        |
+| The prerendered pages                        | `public, max-age=0, s-maxage=86400`   | a day, or until the next deploy |
+| Anything else in `public/`, like the favicon | `public, max-age=0, s-maxage=3600`    | an hour                         |
+| `/api/*`, and anything rendered on request   | `no-store`                            | never                           |
 
-**Each deploy purges every page from the edge** (`purgeOnDeploy`, whose
-default is `html`), so there's no purge job. The assets stay, so a page
+**Each deploy purges every page from the edge** (`purgeOnDeploy: "html"`,
+Railway's default, written out in the file), so there's no purge job. The assets stay, so a page
 still open across a deploy can fetch the old ones it asks for. Browsers ask
 for a page again on every visit (`max-age=0`), and the edge answers. A
 changed favicon takes up to an hour to show; `railway cdn purge all` clears
