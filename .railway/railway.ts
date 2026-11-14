@@ -30,8 +30,8 @@ export default defineRailway(() => {
 
     // The app: one Node server (source/node.ts), which deploys each push to
     // `main` once its CI passes (`checkSuites`)
-    const app = service("starter", {
-        source: github("adomakins/starter", {
+    const app = service("superforge-starter", {
+        source: github("adomakins/superforge-starter", {
             branch: "main",
             checkSuites: true
         }),
@@ -79,5 +79,5 @@ export default defineRailway(() => {
         variables: { managed: true },
         resources: [app, database]
     }
-    return project("starter", definition)
+    return project("superforge-starter", definition)
 })

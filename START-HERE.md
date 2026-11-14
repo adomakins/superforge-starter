@@ -93,7 +93,7 @@ write them for someone who has never met the business.
 
 ## 5. Make the names the business's own
 
-The codebase is called `starter` in a few places. Rename it to a
+The codebase is called `superforge-starter` in a few places. Rename it to a
 short, lowercase name for the business (like `acme-plumbing`):
 
 - `name` in `package.json`.

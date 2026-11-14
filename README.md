@@ -1,4 +1,4 @@
-# Starter
+# Superforge Starter
 
 Your business, in one codebase: a website, an API and a database in one
 repository, deployed on Railway, made to be changed with Claude.
@@ -56,6 +56,6 @@ Claude (and humans): start with [CLAUDE.md](CLAUDE.md).
 This repository is a GitHub template (Use this template → Create a new
 repository), copied from Superforge's production setup with the app code
 taken out. It's Superforge Foundation (internal code `starter-template`).
-Its own copy runs on Railway as the `starter` service, at
+Its own copy runs on Railway as the `superforge-starter` service, at
 <https://superforge-starter.up.railway.app>. A copy made from it replaces
 this section, and the names above, in `START-HERE.md`'s step 5.
