@@ -62,7 +62,7 @@ matters:
   and `appDatabase()`, the migrations ([Data](#data)) and this checkout's
   own Postgres ([Local development](#local-development)). Server-only: used
   by `backend/`, never by `frontend/`.
-- **`utilities/`** — what both sides share, like `primitives/result.ts`. Nothing
+- **`utilities/`** — what both sides share, as it grows. Nothing
   here may import from the other three.
 
 `source/server.ts` and `source/node.ts` sit above them all. TanStack's
@@ -418,12 +418,10 @@ The rare legitimate case deserves a comment explaining why it's safe.
 ### Tagged results for expected failures
 
 Functions that can fail in expected, recoverable ways return an
-`OperationResult` instead of throwing. The type is in
-`source/utilities/primitives/result.ts`.
+`OperationResult` instead of throwing. It and `AsyncOperation` are global
+types, declared in `source/globals.d.ts`, so no file imports them.
 
 ```typescript
-import type { AsyncOperation } from "@/utilities/primitives/result"
-
 async function getPost(slug: string): AsyncOperation<Post, "not-found"> {
     const [post] = await database
         .select()
