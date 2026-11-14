@@ -241,7 +241,7 @@ statement.
   are none until the first table.
 - **Production's** is in Railway's dashboard: the Postgres service's Data
   tab. It's only on Railway's private network, so a script that writes to
-  it runs on the app's service, with `railway ssh --service <service> --
+  it runs on the app's service, with `railway ssh --service app --
   <command>`, which has `DATABASE_URL`.
 - **Restoring production** is Railway's: backups of the database's volume,
   restored from its dashboard. Rolling back a deploy doesn't roll back a

@@ -93,13 +93,15 @@ write them for someone who has never met the business.
 
 ## 5. Make the names the business's own
 
-The codebase is called `superforge-starter` in a few places. Rename it to a
+The codebase is called `starter-template` in a few places. Rename it to a
 short, lowercase name for the business (like `acme-plumbing`):
 
 - `name` in `package.json`.
-- The project, the service, the repository and the service's Railway
-  address in `.railway/railway.ts` (`github("<owner>/<repository>", …)` is this
-  repository on GitHub, as `git remote get-url origin` shows it).
+- In `.railway/railway.ts`: the project, the repository
+  (`github("<owner>/<repository>", …)` is this repository on GitHub, as
+  `git remote get-url origin` shows it), and the service's Railway address
+  (`<name>.up.railway.app`, which has to be free across all of Railway).
+  The service itself is `app`, which stays.
 - `README.md`: its title and first paragraph, and the "This template"
   section, which goes.
 

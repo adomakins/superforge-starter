@@ -132,9 +132,9 @@ create tokens, change repository settings or touch DNS: the steps marked
    Railway's GitHub app allowed to read this repository (railway.com →
    Account Settings → GitHub).
 2. Name things for the business in `.railway/railway.ts` (`START-HERE.md`,
-   step 5): the project, the service, `github("<owner>/<repository>")`,
-   and the service's Railway address, `<service>-production.up.railway.app`,
-   which has to be free across all of Railway.
+   step 5): the project, `github("<owner>/<repository>")`, and the
+   service's Railway address, `<name>.up.railway.app`, which has to be free
+   across all of Railway. The service is `app`, in every copy.
 3. Make the project, from the repository's root, logged in with `railway
    login`:
 
@@ -183,7 +183,7 @@ custom domain joins it under `customDomains`.
 
 **The file can keep a custom domain but can't create one**: `railway
 config plan` refuses a new name under `customDomains`. Add it first with
-`railway domain <name> --service <service>`, which prints the two DNS
+`railway domain <name> --service app`, which prints the two DNS
 records it needs, then declare it in the file in the same change, so the
 next apply keeps it rather than deleting it.
 
