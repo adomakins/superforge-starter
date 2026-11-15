@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises"
 import { AwsClient } from "aws4fetch"
-import type { Storage } from "."
+import type { ObjectStore } from "."
 
 // Railway's bucket, through its S3 API: each request signed with the
 // bucket's keys (AWS's Signature Version 4, by aws4fetch, which only signs,
@@ -28,10 +28,10 @@ const ATTEMPTS = 3
  * server missing them only fails what keeps a file. `fetch` is the tests'
  * to replace.
  */
-export function bucketStorage(
+export function bucketStore(
     configuration: () => BucketConfiguration,
     fetch: (request: Request) => Promise<Response> = globalThis.fetch
-): Storage {
+): ObjectStore {
     let connected: { client: AwsClient; base: URL } | undefined
     function connection() {
         if (connected === undefined) {
@@ -120,7 +120,7 @@ export function bucketStorage(
             if (response.status === 404) {
                 return null
             } else if (response.ok) {
-                return response.text()
+                return new Uint8Array(await response.arrayBuffer())
             } else {
                 const answer = await response.text()
                 console.error("Storage wouldn't hand over a file", {
@@ -130,6 +130,22 @@ export function bucketStorage(
                 })
                 throw new Error(
                     `Storage refused to read ${key} with ${response.status}: ${answer}`
+                )
+            }
+        },
+
+        async delete(key) {
+            // S3 answers 204 whether or not there was a file
+            const response = await send(key, { method: "DELETE" })
+            if (!response.ok && response.status !== 404) {
+                const answer = await response.text()
+                console.error("Storage wouldn't delete a file", {
+                    key,
+                    status: response.status,
+                    answer
+                })
+                throw new Error(
+                    `Storage refused to delete ${key} with ${response.status}: ${answer}`
                 )
             }
         }

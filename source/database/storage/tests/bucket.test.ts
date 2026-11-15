@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { bucketStorage } from "../bucket"
+import type { ObjectStore } from ".."
+import { bucketStore } from "../bucket"
+
+// What's kept under `key`, as text
+async function read(storage: ObjectStore, key: string) {
+    const kept = await storage.get(key)
+    if (kept === null) {
+        return null
+    } else {
+        return new TextDecoder().decode(kept)
+    }
+}
 
 afterEach(() => {
     vi.restoreAllMocks()
@@ -26,7 +37,7 @@ function bucket(answers: (Response | Error)[] = []) {
         authorization: string | null
         content_type: string | null
     }[] = []
-    const storage = bucketStorage(
+    const storage = bucketStore(
         () => CONFIGURATION,
         async (request) => {
             requests.push({
@@ -43,6 +54,9 @@ function bucket(answers: (Response | Error)[] = []) {
             } else if (request.method === "PUT") {
                 objects.set(request.url, await request.text())
                 return new Response(null, { status: 200 })
+            } else if (request.method === "DELETE") {
+                objects.delete(request.url)
+                return new Response(null, { status: 204 })
             } else {
                 const object = objects.get(request.url)
                 return object === undefined
@@ -64,7 +78,7 @@ describe("the Storage bucket", () => {
             "text/html; charset=utf-8"
         )
 
-        expect(await storage.get("invoices/customer-1/invoice 1")).toBe(
+        expect(await read(storage, "invoices/customer-1/invoice 1")).toBe(
             "<p>Hi</p>"
         )
         expect(requests).toEqual([
@@ -83,7 +97,7 @@ describe("the Storage bucket", () => {
     it("sends a file's bytes as they came", async () => {
         const bytes = new Uint8Array([0, 255, 137, 80])
         const sent: Uint8Array[] = []
-        const storage = bucketStorage(
+        const storage = bucketStore(
             () => CONFIGURATION,
             async (request) => {
                 sent.push(new Uint8Array(await request.arrayBuffer()))
@@ -96,10 +110,24 @@ describe("the Storage bucket", () => {
         expect(sent).toEqual([bytes])
     })
 
+    it("deletes a key's file, and a key that holds nothing too", async () => {
+        const { storage, requests } = bucket()
+        await storage.put("invoices/a", "<p>A</p>", "text/html")
+
+        await storage.delete("invoices/a")
+        await storage.delete("invoices/a")
+
+        expect(requests.map((request) => request.method)).toEqual([
+            "PUT",
+            "DELETE",
+            "DELETE"
+        ])
+    })
+
     it("reads a key that holds nothing as null", async () => {
         const { storage } = bucket()
 
-        expect(await storage.get("invoices/nothing")).toBeNull()
+        expect(await read(storage, "invoices/nothing")).toBeNull()
     })
 
     it("makes a request again when the bucket fails for a reason that may pass", async () => {
@@ -112,7 +140,7 @@ describe("the Storage bucket", () => {
         await storage.put("invoices/a", "<p>A</p>", "text/html")
 
         expect(requests).toHaveLength(3)
-        expect(await storage.get("invoices/a")).toBe("<p>A</p>")
+        expect(await read(storage, "invoices/a")).toBe("<p>A</p>")
     })
 
     it("takes an answer for one when the server has swapped the global Response", async () => {
@@ -129,7 +157,7 @@ describe("the Storage bucket", () => {
         vi.stubGlobal("Response", class Response {})
 
         await storage.put("invoices/a", "<p>A</p>", "text/html")
-        expect(await storage.get("invoices/a")).toBe("<p>A</p>")
+        expect(await read(storage, "invoices/a")).toBe("<p>A</p>")
         expect(requests).toHaveLength(2)
         expect(warned).not.toHaveBeenCalled()
 

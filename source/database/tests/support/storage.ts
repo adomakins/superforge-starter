@@ -1,41 +1,42 @@
-import type { Storage } from "../../storage"
+import type { ObjectStore } from "../../storage"
 
 /**
- * The Storage bucket in memory, for a test to put on `c` in place of the
- * app's (`c.set("storage", ...)`): each key's body and content type in
- * `files`, and `fail()` makes the next put throw, like a bucket that's
- * down.
+ * The Storage bucket's bytes in memory, for a test to hand `new Storage()`
+ * (or a subclass with kinds of its own) and put on `c` in place of the
+ * app's: each key's bytes and content type in `files`, and `fail()` makes
+ * the next put throw, like a bucket that's down.
  */
-export function memoryStorage() {
+export function memoryStore() {
     const files = new Map<
         string,
-        { body: string | Uint8Array; content_type: string }
+        { body: Uint8Array<ArrayBuffer>; content_type: string }
     >()
     let failing = false
 
-    const storage: Storage = {
+    const store: ObjectStore = {
         async put(key, body, content_type) {
             if (failing) {
                 failing = false
                 throw new Error("Storage is unavailable")
+            } else if (typeof body === "string") {
+                files.set(key, {
+                    body: new TextEncoder().encode(body),
+                    content_type
+                })
             } else {
-                files.set(key, { body, content_type })
+                files.set(key, { body: new Uint8Array(body), content_type })
             }
         },
         async get(key) {
-            const body = files.get(key)?.body
-            if (body === undefined) {
-                return null
-            } else if (typeof body === "string") {
-                return body
-            } else {
-                return new TextDecoder().decode(body)
-            }
+            return files.get(key)?.body ?? null
+        },
+        async delete(key) {
+            files.delete(key)
         }
     }
 
     return {
-        storage,
+        store,
         files,
         fail() {
             failing = true

@@ -1,24 +1,29 @@
 import { join } from "node:path"
-import { bucketStorage } from "./bucket"
-import { folderStorage } from "./folder"
+import { bucketStore } from "./bucket"
+import { Storage } from "./files"
+import { folderStore } from "./folder"
 
-// The `Storage` bucket (.railway/railway.ts): every file the app keeps, in
-// one bucket with a folder for each kind of file, like
-// `invoices/<customer id>/<invoice id>.pdf`. Nothing keeps a file yet. A
-// build reaches Railway's bucket through its S3 API. A dev server has no
-// credentials for it, so it keeps files in a folder on this machine
-// instead, and the tests keep them in memory
-// (../tests/support/storage.ts).
+// The `Storage` bucket (.railway/railway.ts), through `Storage` (./files.ts):
+// every kind of file the app keeps, each in a folder of its own, filed under
+// a key its kind checks. Underneath it is an `ObjectStore`, bytes under
+// keys: Railway's bucket through its S3 API in a build. A dev server has no
+// credentials for it, so it keeps files in a folder on this machine instead,
+// and the tests keep them in memory (../tests/support/storage.ts).
 
-export type Storage = {
+export { Storage } from "./files"
+
+/** Bytes kept under keys, which only `Files` (./kind.ts) uses. */
+export type ObjectStore = {
     /** Keeps `body` under `key`, in place of whatever was kept there. */
     put(
         key: string,
         body: string | Uint8Array<ArrayBuffer>,
         content_type: string
     ): Promise<void>
-    /** The text kept under `key`, or null when nothing is. */
-    get(key: string): Promise<string | null>
+    /** The bytes kept under `key`, or null when nothing is. */
+    get(key: string): Promise<Uint8Array<ArrayBuffer> | null>
+    /** Deletes what's kept under `key`, if anything is. */
+    delete(key: string): Promise<void>
 }
 
 /**
@@ -39,15 +44,17 @@ let shared: Storage | undefined
  */
 export function appStorage(): Storage {
     if (shared === undefined) {
-        shared = import.meta.env.DEV
-            ? folderStorage(LOCAL_STORAGE_DIRECTORY)
-            : bucketStorage(() => ({
-                  bucket: variable("STORAGE_BUCKET"),
-                  endpoint: variable("STORAGE_ENDPOINT"),
-                  region: variable("STORAGE_REGION"),
-                  access_key_id: variable("STORAGE_ACCESS_KEY_ID"),
-                  secret_access_key: variable("STORAGE_SECRET_ACCESS_KEY")
-              }))
+        shared = new Storage(
+            import.meta.env.DEV
+                ? folderStore(LOCAL_STORAGE_DIRECTORY)
+                : bucketStore(() => ({
+                      bucket: variable("STORAGE_BUCKET"),
+                      endpoint: variable("STORAGE_ENDPOINT"),
+                      region: variable("STORAGE_REGION"),
+                      access_key_id: variable("STORAGE_ACCESS_KEY_ID"),
+                      secret_access_key: variable("STORAGE_SECRET_ACCESS_KEY")
+                  }))
+        )
     }
     return shared
 }

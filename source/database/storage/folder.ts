@@ -1,12 +1,12 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import type { Storage } from "."
+import type { ObjectStore } from "."
 
 /**
  * Files kept in a folder on this machine, for a dev server, which has no
  * credentials for Railway's bucket: each key a path under `directory`.
  */
-export function folderStorage(directory: string): Storage {
+export function folderStore(directory: string): ObjectStore {
     function pathOf(key: string) {
         const parts = key.split("/")
         if (
@@ -27,7 +27,7 @@ export function folderStorage(directory: string): Storage {
 
         async get(key) {
             try {
-                return await readFile(pathOf(key), "utf8")
+                return new Uint8Array(await readFile(pathOf(key)))
             } catch (error) {
                 if (
                     error instanceof Error &&
@@ -43,6 +43,10 @@ export function folderStorage(directory: string): Storage {
                     throw error
                 }
             }
+        },
+
+        async delete(key) {
+            await rm(pathOf(key), { force: true })
         }
     }
 }

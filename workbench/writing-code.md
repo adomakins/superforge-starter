@@ -136,17 +136,26 @@ against `now` and `fromNow` from `time.ts`.
 - **The server keeps 10 connections** (`connect()`'s pool), of the 500
   Railway's Postgres allows. A query that holds one for long, or a loop
   that opens many, starves every request behind it.
-- **Files go in the Storage bucket, not the database.** Anything big,
-  like an upload, goes through `c.var.storage` in a route, `appStorage()`
-  (`source/database/storage/`): Railway's `Storage` bucket through its S3
-  API in a build, with the `STORAGE_*` variables, and a folder on this
-  machine, `.storage/` in the checkout, in a dev server. `put(key, body,
-  content_type)` keeps text or bytes, and `get(key)` reads text back (a
-  file read back as bytes needs a way of its own beside it). Each kind of
-  file gets a folder of its own in the one bucket, its key naming what it
-  hangs off (`invoices/<customer id>/<invoice id>.pdf`), and a row in
-  Postgres keeps the key. A test puts `memoryStorage()`
-  (`source/database/tests/support/storage.ts`) on `c` in its place.
+- **Files go in the Storage bucket, not the database**, one kind of file
+  to a folder, and only through that kind. Each kind is a getter on the
+  `Storage` class (`source/database/storage/files.ts`, whose header has the
+  first one's shape), named for its folder, which says what a file is
+  filed under (a zod schema of its key, like `{ customer_id, invoice_id
+  }`), where a key's file goes (`<customer id>/<invoice id>.pdf`), and
+  what's in it: `json(schema)`, checked with zod as it's kept and as it's
+  read back, `text(content_type)` or `bytes(content_type)`
+  (`storage/kind.ts`). A route then calls `c.var.storage.invoices.put(key,
+  body)`, `.get(key)` (null when there's no file) or `.delete(key)`, and
+  never writes a path: a key that doesn't fit its kind, or a path with an
+  empty, `.` or `..` part, throws before anything is kept. The key's first
+  part is what the file hangs off, so all of one customer's files are one
+  prefix, and a row in Postgres keeps the key's parts. A kind's JSON schema
+  only grows the way a column does, with optional fields, or the files
+  kept before fail to read. Underneath, `appStorage()` keeps the bytes in
+  Railway's `Storage` bucket through its S3 API in a build, with the
+  `STORAGE_*` variables, and in `.storage/` in the checkout in a dev
+  server. A test hands `new Storage(memoryStore().store)`
+  (`source/database/tests/support/storage.ts`) to `c` in its place.
 - **A table goes in one of four Postgres schemas**, by who owns its rows
   and who sees them, and there's never a fifth, nor one per feature
   (features are folders in code):
