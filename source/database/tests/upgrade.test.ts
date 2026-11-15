@@ -9,7 +9,7 @@ import {
     migrationsJournal,
     recordedMigrations
 } from "../migrate"
-import { fill } from "./support/fill"
+import { fill, SCHEMAS } from "./support/fill"
 import { databaseUrl, onServer, quoted } from "./support/server"
 
 // The PR's migrations applied over the base branch's, on a database with
@@ -50,17 +50,17 @@ describe.runIf(base !== undefined)(
 
             try {
                 // The base's migrations, if it has any yet, then sample rows
+                // in every one of its tables, however many it has (none, when
+                // its migrations only make schemas)
                 const before = migrationsAt(ref)
                 if (before !== undefined) {
                     await migrateDatabase(url, before)
                 }
                 const filled = await withClient(url, (client) => fill(client))
-                if (
-                    before !== undefined &&
-                    migrationsJournal(before).length > 0
-                ) {
-                    expect(Object.keys(filled).length).toBeGreaterThan(0)
-                }
+                const tables = await withClient(url, (client) =>
+                    tableCount(client)
+                )
+                expect(Object.keys(filled).length).toBe(tables)
 
                 // Then the PR's, as the deploy applies them
                 await migrateDatabase(url)
@@ -101,6 +101,25 @@ function migrationsAt(ref: string) {
         writeFileSync(path, execFileSync("git", ["show", `${ref}:${file}`]))
     }
     return copy
+}
+
+// How many tables the database has in the schemas `fill()` fills
+async function tableCount(client: pg.Client) {
+    const { rows } = await client.query<{ tables: number }>(
+        `
+        select count(*)::int as tables
+        from pg_class tables
+        join pg_namespace schemas on schemas.oid = tables.relnamespace
+        where schemas.nspname = any($1) and tables.relkind in ('r', 'p')
+    `,
+        [SCHEMAS]
+    )
+    const [counted] = rows
+    if (counted === undefined) {
+        throw new Error("Counting the tables answered no row")
+    } else {
+        return counted.tables
+    }
 }
 
 async function withClient<Result>(
