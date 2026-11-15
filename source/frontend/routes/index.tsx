@@ -36,7 +36,8 @@ function Home() {
     return (
         <main className="mx-auto flex min-h-screen max-w-3xl flex-col px-6 py-10 sm:py-16">
             <header className="flex items-center gap-2.5">
-                <span aria-hidden className="size-5 rounded-md bg-foreground" />
+                {/* The favicon, which follows the device's theme itself */}
+                <img src="/favicon.svg" alt="" className="size-5" />
                 <span className="font-medium text-sm">Your business</span>
             </header>
 

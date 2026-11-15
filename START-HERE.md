@@ -61,8 +61,8 @@ is drawn with ([shadcn's theming](https://ui.shadcn.com/docs/theming)).
   little rounded, `1rem` for very rounded.
 - **Logo and favicon.** Put the logo in `public/`, replace
   `public/favicon.svg` with the mark (an SVG with a `<title>`), and
-  replace the placeholder square in `source/frontend/routes/index.tsx`'s
-  header with the logo.
+  replace the placeholder cube in `source/frontend/routes/index.tsx`'s
+  header (the favicon, in an `<img>`) with the logo.
 
 Use the `impeccable` skill for this step and the next: it knows how to
 turn a brand into a theme that holds together.
