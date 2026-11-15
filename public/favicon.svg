@@ -1,8 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 48 48">
     <title>Your business</title>
+    <!-- Superforge's cube in grays, the placeholder until START-HERE.md
+         puts the business's own mark here: dark gray in light mode, light
+         gray in dark, the top face lightest and the right darkest -->
     <style>
-        rect { fill: #171717; }
-        @media (prefers-color-scheme: dark) { rect { fill: #fafafa; } }
+        .top { fill: #8f8f8f; }
+        .left { fill: #5c5c5c; }
+        .right { fill: #2e2e2e; }
+        @media (prefers-color-scheme: dark) {
+            .top { fill: #f1f1f1; }
+            .left { fill: #b6b6b6; }
+            .right { fill: #797979; }
+        }
     </style>
-    <rect x="4" y="4" width="24" height="24" rx="6" />
+    <polygon class="top" points="32,10 52,21 32,32 12,21" />
+    <polygon class="left" points="12,21 32,32 32,54 12,43" />
+    <polygon class="right" points="32,32 52,21 52,43 32,54" />
 </svg>

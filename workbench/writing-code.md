@@ -136,6 +136,17 @@ against `now` and `fromNow` from `time.ts`.
 - **The server keeps 10 connections** (`connect()`'s pool), of the 500
   Railway's Postgres allows. A query that holds one for long, or a loop
   that opens many, starves every request behind it.
+- **Files go in the Storage bucket, not the database.** Anything big,
+  like an upload, goes through `c.var.storage` in a route, `appStorage()`
+  (`source/database/storage/`): Railway's `Storage` bucket through its S3
+  API in a build, with the `STORAGE_*` variables, and a folder on this
+  machine, `.storage/` in the checkout, in a dev server. `put(key, body,
+  content_type)` keeps text or bytes, and `get(key)` reads text back (a
+  file read back as bytes needs a way of its own beside it). Each kind of
+  file gets a folder of its own in the one bucket, its key naming what it
+  hangs off (`invoices/<customer id>/<invoice id>.pdf`), and a row in
+  Postgres keeps the key. A test puts `memoryStorage()`
+  (`source/database/tests/support/storage.ts`) on `c` in its place.
 - **Tables go in `public`**, the app's data, except what no person ever
   sees (sign-in's codes and sessions, the machinery's own state), which
   goes in an `internal` schema (`pgSchema("internal")` in `schema.ts`), made

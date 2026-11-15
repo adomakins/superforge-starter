@@ -1,9 +1,10 @@
 # Railway
 
 `railway.ts` is the Railway project as code: the app service, its build,
-pre-deploy migrations, start, healthcheck, CDN and variables, and the
-Postgres database with its point-in-time recovery bucket. CI applies it on
-each push to `main`; change Railway here, not in the dashboard.
+pre-deploy migrations, start, healthcheck, CDN and variables, the
+Postgres database with its point-in-time recovery bucket, and the
+`Storage` bucket for the app's files. CI applies it on each push to
+`main`; change Railway here, not in the dashboard.
 
 ```bash
 railway config plan     # what applying it would change, without changing anything

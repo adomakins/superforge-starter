@@ -49,6 +49,16 @@ export default defineRailway(() => {
         WAL_ARCHIVE_PATH: { type: "literal", value: "/pgbackrest" }
     }
 
+    // Every file the app keeps, in one bucket with a folder for each kind of
+    // file (source/database/storage/). Empty until something keeps one, and
+    // an empty bucket costs next to nothing. One bucket rather than one per
+    // kind, since Railway's buckets have no lifecycle rules, public access
+    // or read-only keys to set apart, and the one app holds every key
+    // anyway. In iad, beside the app's us-east4, since a bucket's region
+    // can't change. It's only on the public network, so the app's uploads
+    // count as its egress.
+    const storage = bucket("Storage", { region: "iad" })
+
     // The app: one Node server (source/node.ts), which deploys each push to
     // `main` once its CI passes (`checkSuites`). Named for what it is, so a
     // copy keeps the name; the project and the repository are the business's.
@@ -82,7 +92,14 @@ export default defineRailway(() => {
         // under us.
         cdn: { enabled: true, purgeOnDeploy: "html" },
         env: {
-            DATABASE_URL: ref(database, "DATABASE_URL")
+            DATABASE_URL: ref(database, "DATABASE_URL"),
+            // The Storage bucket's S3 credentials. `BUCKET` is its name for
+            // the S3 API, not "Storage"
+            STORAGE_BUCKET: ref(storage, "BUCKET"),
+            STORAGE_ENDPOINT: ref(storage, "ENDPOINT"),
+            STORAGE_REGION: ref(storage, "REGION"),
+            STORAGE_ACCESS_KEY_ID: ref(storage, "ACCESS_KEY_ID"),
+            STORAGE_SECRET_ACCESS_KEY: ref(storage, "SECRET_ACCESS_KEY")
         }
     })
     // Railway's own address for the app, which the first apply makes with
@@ -99,7 +116,7 @@ export default defineRailway(() => {
     // which TypeScript checks without refusing the extra key
     const definition = {
         variables: { managed: true },
-        resources: [app, database, recoveryArchive]
+        resources: [app, database, recoveryArchive, storage]
     }
     return project("superforge-starter", definition)
 })
