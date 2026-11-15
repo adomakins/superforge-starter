@@ -7,7 +7,7 @@ import { databaseUrl, onServer, quoted } from "./server"
  * A database of the test's own, with every migration applied: a copy of
  * the run's template (setup.ts), dropped when the test finishes. For
  * testing code that queries the database on real rows, as a route sees it
- * through `c.var.database`. Call it inside a test.
+ * through `context.var.database`. Call it inside a test.
  */
 export async function testDatabase() {
     const template = inject("database_template")

@@ -133,9 +133,11 @@ create tokens, change repository settings or touch DNS: the steps marked
    Railway's GitHub app allowed to read this repository (railway.com →
    Account Settings → GitHub).
 2. Name things for the business in `.railway/railway.ts` (`START-HERE.md`,
-   step 5): the project, `github("<owner>/<repository>")`, and the
-   service's Railway address, `<name>.up.railway.app`, which has to be free
-   across all of Railway. The service is `app`, in every copy.
+   step 5): the project, `github("<owner>/<repository>")`, the service's
+   Railway address, `<name>.up.railway.app`, which has to be free across
+   all of Railway, and the region nearest its customers, `REGION`, which
+   the app, the database and the buckets share. The service is `app`, in
+   every copy.
 3. Make the project, from the repository's root, logged in with `railway
    login`:
 
@@ -146,7 +148,7 @@ create tokens, change repository settings or touch DNS: the steps marked
 
    The first apply makes the service and its Postgres, with point-in-time
    recovery on (`writing-code.md`, "Restoring production"). Railway may make
-   the database in its default region whatever `region` says, and leave
+   the database in its default region whatever `REGION` says, and leave
    Wait for CI off on the new service: run `railway config plan`, and if it
    shows either, `railway config apply --confirm-destructive` once more
    (moving an empty database loses nothing). Then check that recovery is

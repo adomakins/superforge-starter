@@ -2,8 +2,9 @@ import type { ObjectStore } from "."
 
 /**
  * Every kind of file the app keeps, each a folder in the `Storage` bucket,
- * as `c.var.storage` in a route: `c.var.storage.invoices.put(key, body)`,
- * `.get(key)` and `.delete(key)`. Nothing reaches the bucket any other way,
+ * as `context.var.storage` in a route:
+ * `context.var.storage.invoices.put(key, body)`, `.get(key)` and
+ * `.delete(key)`. Nothing reaches the bucket any other way,
  * so every file is filed under a key its kind checks, at the path its kind
  * makes, holding what its kind says (./kind.ts).
  *

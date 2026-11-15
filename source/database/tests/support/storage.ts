@@ -2,7 +2,7 @@ import type { ObjectStore } from "../../storage"
 
 /**
  * The Storage bucket's bytes in memory, for a test to hand `new Storage()`
- * (or a subclass with kinds of its own) and put on `c` in place of the
+ * (or a subclass with kinds of its own) and put on a route's `context` in place of the
  * app's: each key's bytes and content type in `files`, and `fail()` makes
  * the next put throw, like a bucket that's down.
  */

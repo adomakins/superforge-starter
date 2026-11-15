@@ -82,7 +82,7 @@ matters:
   ([Headless](#headless)): Hono routes are plain HTTP, so a webhook, a
   script or an agent can reach them too.
   Check what comes in with zod. A route reads the database from
-  `c.var.database`, never `appDatabase()` directly, so a test can hand it
+  `context.var.database`, never `appDatabase()` directly, so a test can hand it
   its own.
 - **A table or a column** → `source/database/schema.ts`, with a migration
   from `pnpm database:generate` ([Migrations](#migrations)).
@@ -120,16 +120,16 @@ what it hangs off, snake_case columns, uuids for our own rows, every
 timestamp a `timestamptz` to the millisecond (`columns.ts`), compared
 against `now` and `fromNow` from `time.ts`.
 
-- **In a Hono route, use `c.var.database`.** `source/backend/index.ts` puts
+- **In a Hono route, use `context.var.database`.** `source/backend/index.ts` puts
   it there for every request: `appDatabase()`, the server's one pool,
   connected to `DATABASE_URL` (Railway sets it), or to the checkout's own
   database in a dev server, whatever `DATABASE_URL` says. A script makes its
   own with `connect(url)` and ends it with `.$client.end()`.
 - **Statements that must land together go in one transaction**:
-  `database.transaction(async (tx) => …)`. Inside it, every query goes
-  through `tx`: one on `database` runs on another connection, outside the
-  transaction. A function that may run inside one takes the `Database`
-  type, which a `tx` is too.
+  `database.transaction(async (transaction) => …)`. Inside it, every query
+  goes through `transaction`: one on `database` runs on another
+  connection, outside it. A function that may run inside one takes the
+  `Database` type, which a `transaction` is too.
 - **Index the column a foreign key or a join follows.** Postgres doesn't
   index a foreign key's column by itself, and a cascade from a parent then
   scans the child's table.
@@ -144,9 +144,9 @@ against `now` and `fromNow` from `time.ts`.
   }`), where a key's file goes (`<customer id>/<invoice id>.pdf`), and
   what's in it: `json(schema)`, checked with zod as it's kept and as it's
   read back, `text(content_type)` or `bytes(content_type)`
-  (`storage/kind.ts`). A route then calls `c.var.storage.invoices.put(key,
-  body)`, `.get(key)` (null when there's no file) or `.delete(key)`, and
-  never writes a path: a key that doesn't fit its kind, or a path with an
+  (`storage/kind.ts`). A route then calls
+  `context.var.storage.invoices.put(key, body)`, `.get(key)` (null when
+  there's no file) or `.delete(key)`, and never writes a path: a key that doesn't fit its kind, or a path with an
   empty, `.` or `..` part, throws before anything is kept. The key's first
   part is what the file hangs off, so all of one customer's files are one
   prefix, and a row in Postgres keeps the key's parts. A kind's JSON schema
@@ -155,7 +155,7 @@ against `now` and `fromNow` from `time.ts`.
   Railway's `Storage` bucket through its S3 API in a build, with the
   `STORAGE_*` variables, and in `.storage/` in the checkout in a dev
   server. A test hands `new Storage(memoryStore().store)`
-  (`source/database/tests/support/storage.ts`) to `c` in its place.
+  (`source/database/tests/support/storage.ts`) to the route's `context` in its place.
 - **A table goes in one of four Postgres schemas**, by who owns its rows
   and who sees them, and there's never a fifth, nor one per feature
   (features are folders in code):

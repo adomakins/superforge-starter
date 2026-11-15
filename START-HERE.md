@@ -102,6 +102,12 @@ short, lowercase name for the business (like `acme-plumbing`):
   `git remote get-url origin` shows it), and the service's Railway address
   (`<name>.up.railway.app`, which has to be free across all of Railway).
   The service itself is `app`, which stays.
+- The region, `REGION` at the top of `.railway/railway.ts`: ask where most
+  of the business's customers are, and pick the nearest of Railway's four
+  (`us-west`, California; `us-east`, Virginia; `europe-west`, Amsterdam;
+  `asia-southeast`, Singapore). The app, its database and its buckets all
+  run there. Choose it now: once the first apply has made the buckets,
+  they can't move.
 - `README.md`: its title and first paragraph, and the "This template"
   section, which goes.
 

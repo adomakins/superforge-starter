@@ -30,7 +30,7 @@ export function connect(url: string, size = POOL_SIZE) {
 /**
  * The database, or a transaction in it (`database.transaction()`): what
  * every query is written against. Statements that must land together go in
- * one transaction, and a function that runs inside one takes its `tx` as
+ * one transaction, and a function that runs inside one takes its `transaction` as
  * this, since a query on the pool would run outside it.
  */
 export type Database = PgDatabase<NodePgQueryResultHKT, typeof schema>
