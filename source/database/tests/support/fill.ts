@@ -22,7 +22,7 @@ const ROWS = 3
 
 // The Postgres schemas whose tables get rows: every one of ours (schema.ts),
 // but not DBOS's, which DBOS migrates itself
-const SCHEMAS = ["public", "auth", "internal"]
+export const SCHEMAS = ["public", "auth", "internal"]
 
 type Column = {
     name: string
