@@ -101,13 +101,13 @@ server.
 
 **The project's configuration is `.railway/railway.ts`**, Railway's
 infrastructure as code: the app service, its build, pre-deploy migrations,
-start, healthcheck, CDN and variables, and the Postgres database with its
-point-in-time recovery bucket. Railway
-doesn't read it as it deploys. `railway config plan` shows what applying it
-would change, and `railway config apply` changes it; CI applies it on each
-push (above), with the `RAILWAY_TOKEN` secret. **Change Railway in this
-file, not the dashboard.** Each push's apply puts back any setting the file
-says otherwise, and the file owns every service variable: one set only in
+start, healthcheck, CDN and variables, the Postgres database with its
+point-in-time recovery bucket, and the `Storage` bucket for the app's
+files. Railway doesn't read it as it deploys. `railway config plan` shows
+what applying it would change, and `railway config apply` changes it; CI
+applies it on each push (above), with the `RAILWAY_TOKEN` secret.
+**Change Railway in this file, not the dashboard.** Each push's apply puts
+back any setting the file says otherwise, and the file owns every service variable: one set only in
 the dashboard is a deletion the apply refuses, which fails the push and
 skips its deploy. A secret goes in as `preserve()`, which keeps the value
 set in the dashboard.
@@ -133,9 +133,11 @@ create tokens, change repository settings or touch DNS: the steps marked
    Railway's GitHub app allowed to read this repository (railway.com →
    Account Settings → GitHub).
 2. Name things for the business in `.railway/railway.ts` (`START-HERE.md`,
-   step 5): the project, `github("<owner>/<repository>")`, and the
-   service's Railway address, `<name>.up.railway.app`, which has to be free
-   across all of Railway. The service is `app`, in every copy.
+   step 5): the project, `github("<owner>/<repository>")`, the service's
+   Railway address, `<name>.up.railway.app`, which has to be free across
+   all of Railway, and the region nearest its customers, `REGION`, which
+   the app, the database and the buckets share. The service is `app`, in
+   every copy.
 3. Make the project, from the repository's root, logged in with `railway
    login`:
 
@@ -146,7 +148,7 @@ create tokens, change repository settings or touch DNS: the steps marked
 
    The first apply makes the service and its Postgres, with point-in-time
    recovery on (`writing-code.md`, "Restoring production"). Railway may make
-   the database in its default region whatever `region` says, and leave
+   the database in its default region whatever `REGION` says, and leave
    Wait for CI off on the new service: run `railway config plan`, and if it
    shows either, `railway config apply --confirm-destructive` once more
    (moving an empty database loses nothing). Then check that recovery is
@@ -255,11 +257,13 @@ When you're asked to ship, push the branch and open the PR with
 
 The server's configuration is Railway variables on the app's service,
 named in `.railway/railway.ts`: `DATABASE_URL` (a reference to the
-database's), and any secret as `preserve()`, whose value the human sets in
-Railway's dashboard. A new one goes in the file first, since the file owns
-every variable on the service (above), and a new secret is named in the PR
-so the human sets it before the merge. Never put a secret's value in the
+database's), the `Storage` bucket's S3 credentials as `STORAGE_*`
+(references to the bucket's), and any secret as `preserve()`, whose value
+the human sets in Railway's dashboard. A new one goes in the file first,
+since the file owns every variable on the service (above), and a new
+secret is named in the PR so the human sets it before the merge. Never put a secret's value in the
 file, and never commit one: `.env*` is ignored for that reason.
 
-A dev server needs none of them: it uses the checkout's own Postgres, and
-reads anything else from the shell that started it.
+A dev server needs none of them: it uses the checkout's own Postgres,
+keeps files in the checkout's `.storage/` folder, and reads anything else
+from the shell that started it.

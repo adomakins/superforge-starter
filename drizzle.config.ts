@@ -8,5 +8,8 @@ import { defineConfig } from "drizzle-kit"
 export default defineConfig({
     dialect: "postgresql",
     schema: "./source/database/schema.ts",
-    out: "./source/database/migrations"
+    out: "./source/database/migrations",
+    // Our Postgres schemas (schema.ts). DBOS's, `dbos`, is its own to make
+    // and migrate, so Drizzle Kit leaves it alone
+    schemaFilter: ["public", "auth", "internal"]
 })

@@ -20,9 +20,9 @@ import * as schema from "../../schema"
 
 const ROWS = 3
 
-// The Postgres schemas whose tables get rows: the app's data, and the
-// machinery's own state, once it has some (schema.ts)
-const SCHEMAS = ["public", "internal"]
+// The Postgres schemas whose tables get rows: every one of ours (schema.ts),
+// but not DBOS's, which DBOS migrates itself
+const SCHEMAS = ["public", "auth", "internal"]
 
 type Column = {
     name: string
@@ -205,16 +205,18 @@ async function tablesInOrder(client: pg.ClientBase) {
         defaulted: boolean
     }>(
         `
-        select ${qualifiedName("n", "c")} as table_name, a.attname as column_name,
-            t.typname as type, not a.attnotnull as nullable,
-            (a.atthasdef or a.attidentity <> '' or a.attgenerated <> '') as defaulted
-        from pg_attribute a
-        join pg_class c on c.oid = a.attrelid
-        join pg_namespace n on n.oid = c.relnamespace
-        join pg_type t on t.oid = a.atttypid
-        where n.nspname = any($1) and c.relkind in ('r', 'p')
-            and a.attnum > 0 and not a.attisdropped
-        order by n.nspname, c.relname, a.attnum
+        select ${qualifiedName("schemas", "tables")} as table_name,
+            columns.attname as column_name, types.typname as type,
+            not columns.attnotnull as nullable,
+            (columns.atthasdef or columns.attidentity <> ''
+                or columns.attgenerated <> '') as defaulted
+        from pg_attribute columns
+        join pg_class tables on tables.oid = columns.attrelid
+        join pg_namespace schemas on schemas.oid = tables.relnamespace
+        join pg_type types on types.oid = columns.atttypid
+        where schemas.nspname = any($1) and tables.relkind in ('r', 'p')
+            and columns.attnum > 0 and not columns.attisdropped
+        order by schemas.nspname, tables.relname, columns.attnum
     `,
         [SCHEMAS]
     )
@@ -227,27 +229,37 @@ async function tablesInOrder(client: pg.ClientBase) {
         references_column: string | null
     }>(
         `
-        select ${qualifiedName("n", "c")} as table_name, a.attname as column_name,
-            k.contype as kind, k.conname as constraint_name,
-            ${qualifiedName("fn", "f")} as references_table,
-            fa.attname as references_column
-        from pg_constraint k
-        join pg_class c on c.oid = k.conrelid
-        join pg_namespace n on n.oid = c.relnamespace
-        cross join lateral unnest(k.conkey) with ordinality as own(attnum, position)
-        join pg_attribute a on a.attrelid = c.oid and a.attnum = own.attnum
-        left join pg_class f on f.oid = k.confrelid
-        left join pg_namespace fn on fn.oid = f.relnamespace
-        left join pg_attribute fa on fa.attrelid = k.confrelid
-            and fa.attnum = k.confkey[own.position]
-        where n.nspname = any($1) and k.contype in ('p', 'u', 'f')
+        select ${qualifiedName("schemas", "tables")} as table_name,
+            columns.attname as column_name, constraints.contype as kind,
+            constraints.conname as constraint_name,
+            ${qualifiedName("referenced_schemas", "referenced_tables")}
+                as references_table,
+            referenced_columns.attname as references_column
+        from pg_constraint constraints
+        join pg_class tables on tables.oid = constraints.conrelid
+        join pg_namespace schemas on schemas.oid = tables.relnamespace
+        cross join lateral unnest(constraints.conkey)
+            with ordinality as own(attnum, position)
+        join pg_attribute columns on columns.attrelid = tables.oid
+            and columns.attnum = own.attnum
+        left join pg_class referenced_tables
+            on referenced_tables.oid = constraints.confrelid
+        left join pg_namespace referenced_schemas
+            on referenced_schemas.oid = referenced_tables.relnamespace
+        left join pg_attribute referenced_columns
+            on referenced_columns.attrelid = constraints.confrelid
+            and referenced_columns.attnum = constraints.confkey[own.position]
+        where schemas.nspname = any($1)
+            and constraints.contype in ('p', 'u', 'f')
         union
-        select ${qualifiedName("n", "c")}, a.attname, 'u', null, null, null
-        from pg_index i
-        join pg_class c on c.oid = i.indrelid
-        join pg_namespace n on n.oid = c.relnamespace
-        join pg_attribute a on a.attrelid = c.oid and a.attnum = any(i.indkey)
-        where n.nspname = any($1) and i.indisunique
+        select ${qualifiedName("schemas", "tables")}, columns.attname, 'u',
+            null, null, null
+        from pg_index indexes
+        join pg_class tables on tables.oid = indexes.indrelid
+        join pg_namespace schemas on schemas.oid = tables.relnamespace
+        join pg_attribute columns on columns.attrelid = tables.oid
+            and columns.attnum = any(indexes.indkey)
+        where schemas.nspname = any($1) and indexes.indisunique
     `,
         [SCHEMAS]
     )

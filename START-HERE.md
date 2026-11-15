@@ -61,8 +61,8 @@ is drawn with ([shadcn's theming](https://ui.shadcn.com/docs/theming)).
   little rounded, `1rem` for very rounded.
 - **Logo and favicon.** Put the logo in `public/`, replace
   `public/favicon.svg` with the mark (an SVG with a `<title>`), and
-  replace the placeholder square in `source/frontend/routes/index.tsx`'s
-  header with the logo.
+  replace the placeholder cube in `source/frontend/routes/index.tsx`'s
+  header (the favicon, in an `<img>`) with the logo.
 
 Use the `impeccable` skill for this step and the next: it knows how to
 turn a brand into a theme that holds together.
@@ -102,6 +102,12 @@ short, lowercase name for the business (like `acme-plumbing`):
   `git remote get-url origin` shows it), and the service's Railway address
   (`<name>.up.railway.app`, which has to be free across all of Railway).
   The service itself is `app`, which stays.
+- The region, `REGION` at the top of `.railway/railway.ts`: ask where most
+  of the business's customers are, and pick the nearest of Railway's four
+  (`us-west`, California; `us-east`, Virginia; `europe-west`, Amsterdam;
+  `asia-southeast`, Singapore). The app, its database and its buckets all
+  run there. Choose it now: once the first apply has made the buckets,
+  they can't move.
 - `README.md`: its title and first paragraph, and the "This template"
   section, which goes.
 

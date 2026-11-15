@@ -46,15 +46,18 @@ const app = new Hono()
     .use(
         serveStatic({
             root: "output/client",
-            onFound: (file, c) => {
-                c.header("Cache-Control", cacheControl(c.req.path, file))
+            onFound: (file, context) => {
+                context.header(
+                    "Cache-Control",
+                    cacheControl(context.req.path, file)
+                )
             }
         })
     )
     // Anything rendered on request (the API, a 404) stays out of the edge's
     // cache unless it says otherwise
-    .all("*", async (c) => {
-        const response = await built.default.fetch(c.req.raw)
+    .all("*", async (context) => {
+        const response = await built.default.fetch(context.req.raw)
         if (!response.headers.has("Cache-Control")) {
             const headers = new Headers(response.headers)
             headers.set("Cache-Control", "no-store")

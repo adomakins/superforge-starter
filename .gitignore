@@ -20,6 +20,10 @@ node_modules/
 # (source/database/local)
 .postgres/
 
+# A dev server's files, kept here in place of the Storage bucket
+# (source/database/storage)
+.storage/
+
 # Builds
 output/
 .tanstack/

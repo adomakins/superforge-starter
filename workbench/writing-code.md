@@ -82,7 +82,7 @@ matters:
   ([Headless](#headless)): Hono routes are plain HTTP, so a webhook, a
   script or an agent can reach them too.
   Check what comes in with zod. A route reads the database from
-  `c.var.database`, never `appDatabase()` directly, so a test can hand it
+  `context.var.database`, never `appDatabase()` directly, so a test can hand it
   its own.
 - **A table or a column** → `source/database/schema.ts`, with a migration
   from `pnpm database:generate` ([Migrations](#migrations)).
@@ -105,7 +105,7 @@ There's **one database, Postgres**, on Railway, queried with Drizzle
 
 |                       | Postgres                                                                    |
 | --------------------- | --------------------------------------------------------------------------- |
-| Holds                 | nothing yet: `schema.ts` has the first table's shape in its header          |
+| Holds                 | no tables yet: `schema.ts` has the first one's shape in its header          |
 | Schema                | `source/database/schema.ts`                                                 |
 | New migration         | `pnpm database:generate`, into `source/database/migrations/`                |
 | Applied in production | `pnpm database:migrate`, Railway's pre-deploy command, before each deploy   |
@@ -120,27 +120,59 @@ what it hangs off, snake_case columns, uuids for our own rows, every
 timestamp a `timestamptz` to the millisecond (`columns.ts`), compared
 against `now` and `fromNow` from `time.ts`.
 
-- **In a Hono route, use `c.var.database`.** `source/backend/index.ts` puts
+- **In a Hono route, use `context.var.database`.** `source/backend/index.ts` puts
   it there for every request: `appDatabase()`, the server's one pool,
   connected to `DATABASE_URL` (Railway sets it), or to the checkout's own
   database in a dev server, whatever `DATABASE_URL` says. A script makes its
   own with `connect(url)` and ends it with `.$client.end()`.
 - **Statements that must land together go in one transaction**:
-  `database.transaction(async (tx) => …)`. Inside it, every query goes
-  through `tx`: one on `database` runs on another connection, outside the
-  transaction. A function that may run inside one takes the `Database`
-  type, which a `tx` is too.
+  `database.transaction(async (transaction) => …)`. Inside it, every query
+  goes through `transaction`: one on `database` runs on another
+  connection, outside it. A function that may run inside one takes the
+  `Database` type, which a `transaction` is too.
 - **Index the column a foreign key or a join follows.** Postgres doesn't
   index a foreign key's column by itself, and a cascade from a parent then
   scans the child's table.
 - **The server keeps 10 connections** (`connect()`'s pool), of the 500
   Railway's Postgres allows. A query that holds one for long, or a loop
   that opens many, starves every request behind it.
-- **Tables go in `public`**, the app's data, except what no person ever
-  sees (sign-in's codes and sessions, the machinery's own state), which
-  goes in an `internal` schema (`pgSchema("internal")` in `schema.ts`), made
-  when the first such table arrives. The upgrade test's sample rows
-  already fill both (`SCHEMAS` in `tests/support/fill.ts`).
+- **Files go in the Storage bucket, not the database**, one kind of file
+  to a folder, and only through that kind. Each kind is a getter on the
+  `Storage` class (`source/database/storage/files.ts`, whose header has the
+  first one's shape), named for its folder, which says what a file is
+  filed under (a zod schema of its key, like `{ customer_id, invoice_id
+  }`), where a key's file goes (`<customer id>/<invoice id>.pdf`), and
+  what's in it: `json(schema)`, checked with zod as it's kept and as it's
+  read back, `text(content_type)` or `bytes(content_type)`
+  (`storage/kind.ts`). A route then calls
+  `context.var.storage.invoices.put(key, body)`, `.get(key)` (null when
+  there's no file) or `.delete(key)`, and never writes a path: a key that doesn't fit its kind, or a path with an
+  empty, `.` or `..` part, throws before anything is kept. The key's first
+  part is what the file hangs off, so all of one customer's files are one
+  prefix, and a row in Postgres keeps the key's parts. A kind's JSON schema
+  only grows the way a column does, with optional fields, or the files
+  kept before fail to read. Underneath, `appStorage()` keeps the bytes in
+  Railway's `Storage` bucket through its S3 API in a build, with the
+  `STORAGE_*` variables, and in `.storage/` in the checkout in a dev
+  server. A test hands `new Storage(memoryStore().store)`
+  (`source/database/tests/support/storage.ts`) to the route's `context` in its place.
+- **A table goes in one of four Postgres schemas**, by who owns its rows
+  and who sees them, and there's never a fifth, nor one per feature
+  (features are folders in code):
+  - **`public`**, the business's own data, whatever the app is built to
+    do: `pgTable(...)`.
+  - **`auth`**, who can get in: users, sessions, sign-in codes and API
+    tokens: `auth.table(...)`. They're the most sensitive rows, kept apart
+    so a read-only role can be given everything but them.
+  - **`internal`**, the rest of the machinery, what no person sees, like
+    an error log or rate limits: `internal.table(...)`.
+  - **`dbos`**, DBOS's own tables, once background workflows arrive. DBOS
+    makes and migrates it, nothing of ours writes to it, and Drizzle Kit
+    leaves it alone (`schemaFilter` in `drizzle.config.ts`).
+
+  `auth` and `internal` are declared in `schema.ts` and made by the first
+  migration. The upgrade test's sample rows fill all three of ours
+  (`SCHEMAS` in `tests/support/fill.ts`).
 
 ### Migrations
 

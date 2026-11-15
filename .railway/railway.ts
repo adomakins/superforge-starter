@@ -8,6 +8,29 @@ import {
     service
 } from "railway/iac"
 
+// Railway's four regions, each named as its services and databases name it
+// and as its buckets do, by the nearest airport's code (iad is Washington
+// Dulles): https://docs.railway.com/deployments/regions, and `railway
+// bucket create --help` for the buckets'.
+const REGIONS = {
+    // California
+    "us-west": { service: "us-west2", bucket: "sjc" },
+    // Virginia
+    "us-east": { service: "us-east4-eqdc4a", bucket: "iad" },
+    // Amsterdam
+    "europe-west": { service: "europe-west4-drams3a", bucket: "ams" },
+    // Singapore
+    "asia-southeast": { service: "asia-southeast1-eqsg3a", bucket: "sin" }
+} as const
+
+/**
+ * Where the app, its database and its buckets all run: the region nearest
+ * the business's customers, which START-HERE.md sets before the first
+ * apply. Choose it once. A bucket can't move after it's made, and a
+ * database with rows in it moves only by hand.
+ */
+const REGION = REGIONS["us-east"]
+
 /**
  * The Railway project, as code. `railway config plan` shows what applying
  * it would change and `railway config apply` changes it (README.md here);
@@ -22,11 +45,9 @@ import {
  * (workbench/commit-and-deploy.md, "Setting up Railway").
  */
 export default defineRailway(() => {
-    const region = "us-east4-eqdc4a"
-
     // The database, reachable only on the private network
     // (source/database/). Railway gives it its volume.
-    const database = postgres("Postgres", { region })
+    const database = postgres("Postgres", { region: REGION.service })
     database.networking = { privateNetworkEndpoint: "postgres" }
 
     // The database's point-in-time recovery: Postgres sends every change
@@ -37,9 +58,8 @@ export default defineRailway(() => {
     // Postgres image archives whenever the `WAL_ARCHIVE_*` variables are set,
     // so these are what turn it on, from the first apply. They're the ones
     // `railway postgres pitr enable` sets (read from superforge's on
-    // 2026-11-14). The bucket is in iad, beside the app's us-east4, where
-    // Railway puts it.
-    const recoveryArchive = bucket("Postgres-PITR", { region: "iad" })
+    // 2026-11-14). The bucket is in the database's region.
+    const recoveryArchive = bucket("Postgres-PITR", { region: REGION.bucket })
     database.variables = {
         WAL_ARCHIVE_BUCKET: ref(recoveryArchive, "BUCKET"),
         WAL_ARCHIVE_ENDPOINT: ref(recoveryArchive, "ENDPOINT"),
@@ -48,6 +68,15 @@ export default defineRailway(() => {
         WAL_ARCHIVE_SECRET: ref(recoveryArchive, "SECRET_ACCESS_KEY"),
         WAL_ARCHIVE_PATH: { type: "literal", value: "/pgbackrest" }
     }
+
+    // Every file the app keeps, in one bucket with a folder for each kind of
+    // file (source/database/storage/). Empty until something keeps one, and
+    // an empty bucket costs next to nothing. One bucket rather than one per
+    // kind, since Railway's buckets have no lifecycle rules, public access
+    // or read-only keys to set apart, and the one app holds every key
+    // anyway. In the app's region. It's only on the public network, so the
+    // app's uploads count as its egress.
+    const storage = bucket("Storage", { region: REGION.bucket })
 
     // The app: one Node server (source/node.ts), which deploys each push to
     // `main` once its CI passes (`checkSuites`). Named for what it is, so a
@@ -73,7 +102,7 @@ export default defineRailway(() => {
         // Traffic moves to a new deployment only once the server reaches
         // the database
         healthcheck: "/api/health",
-        replicas: { [region]: 1 },
+        replicas: { [REGION.service]: 1 },
         // Railway's CDN in front of the app: the pages for a day at most, and
         // only until the next deploy, which purges every page (`html`), and
         // the hashed assets for good, by the headers source/node.ts sends
@@ -82,7 +111,14 @@ export default defineRailway(() => {
         // under us.
         cdn: { enabled: true, purgeOnDeploy: "html" },
         env: {
-            DATABASE_URL: ref(database, "DATABASE_URL")
+            DATABASE_URL: ref(database, "DATABASE_URL"),
+            // The Storage bucket's S3 credentials. `BUCKET` is its name for
+            // the S3 API, not "Storage"
+            STORAGE_BUCKET: ref(storage, "BUCKET"),
+            STORAGE_ENDPOINT: ref(storage, "ENDPOINT"),
+            STORAGE_REGION: ref(storage, "REGION"),
+            STORAGE_ACCESS_KEY_ID: ref(storage, "ACCESS_KEY_ID"),
+            STORAGE_SECRET_ACCESS_KEY: ref(storage, "SECRET_ACCESS_KEY")
         }
     })
     // Railway's own address for the app, which the first apply makes with
@@ -99,7 +135,7 @@ export default defineRailway(() => {
     // which TypeScript checks without refusing the extra key
     const definition = {
         variables: { managed: true },
-        resources: [app, database, recoveryArchive]
+        resources: [app, database, recoveryArchive, storage]
     }
     return project("superforge-starter", definition)
 })

@@ -20,7 +20,19 @@
 //   makes them unique when that's natural.
 // - Every timestamp is a `timestamptz` to the millisecond (`timestamp()`),
 //   compared against `now` and `fromNow` from time.ts.
-// - The app's data is in `public`. What no person ever sees (sessions,
-//   codes, the machinery's own state) goes in an `internal` schema, made
-//   with `pgSchema("internal")` the first time a table needs it.
-export {}
+// - A table goes in one of four Postgres schemas, by who owns its rows and
+//   who sees them, never one per feature (features are folders in code):
+//   - `public`: the business's own data, whatever the app is built to do.
+//     A table here is `pgTable(...)`.
+//   - `auth`: who can get in: users, sessions, sign-in codes and API
+//     tokens. The most sensitive rows, kept apart so a read-only role can
+//     leave them out. A table here is `auth.table(...)`.
+//   - `internal`: the rest of the machinery, what no person sees, like an
+//     error log or rate limits. A table here is `internal.table(...)`.
+//   - `dbos`: DBOS's own tables, which it makes and migrates itself once
+//     background workflows arrive. Nothing here writes to it, and it isn't
+//     declared below.
+import { pgSchema } from "drizzle-orm/pg-core"
+
+export const auth = pgSchema("auth")
+export const internal = pgSchema("internal")
