@@ -20,9 +20,9 @@ import * as schema from "../../schema"
 
 const ROWS = 3
 
-// The Postgres schemas whose tables get rows: the app's data, and the
-// machinery's own state, once it has some (schema.ts)
-const SCHEMAS = ["public", "internal"]
+// The Postgres schemas whose tables get rows: every one of ours (schema.ts),
+// but not DBOS's, which DBOS migrates itself
+const SCHEMAS = ["public", "auth", "internal"]
 
 type Column = {
     name: string

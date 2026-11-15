@@ -105,7 +105,7 @@ There's **one database, Postgres**, on Railway, queried with Drizzle
 
 |                       | Postgres                                                                    |
 | --------------------- | --------------------------------------------------------------------------- |
-| Holds                 | nothing yet: `schema.ts` has the first table's shape in its header          |
+| Holds                 | no tables yet: `schema.ts` has the first one's shape in its header          |
 | Schema                | `source/database/schema.ts`                                                 |
 | New migration         | `pnpm database:generate`, into `source/database/migrations/`                |
 | Applied in production | `pnpm database:migrate`, Railway's pre-deploy command, before each deploy   |
@@ -147,11 +147,23 @@ against `now` and `fromNow` from `time.ts`.
   hangs off (`invoices/<customer id>/<invoice id>.pdf`), and a row in
   Postgres keeps the key. A test puts `memoryStorage()`
   (`source/database/tests/support/storage.ts`) on `c` in its place.
-- **Tables go in `public`**, the app's data, except what no person ever
-  sees (sign-in's codes and sessions, the machinery's own state), which
-  goes in an `internal` schema (`pgSchema("internal")` in `schema.ts`), made
-  when the first such table arrives. The upgrade test's sample rows
-  already fill both (`SCHEMAS` in `tests/support/fill.ts`).
+- **A table goes in one of four Postgres schemas**, by who owns its rows
+  and who sees them, and there's never a fifth, nor one per feature
+  (features are folders in code):
+  - **`public`**, the business's own data, whatever the app is built to
+    do: `pgTable(...)`.
+  - **`auth`**, who can get in: users, sessions, sign-in codes and API
+    tokens: `auth.table(...)`. They're the most sensitive rows, kept apart
+    so a read-only role can be given everything but them.
+  - **`internal`**, the rest of the machinery, what no person sees, like
+    an error log or rate limits: `internal.table(...)`.
+  - **`dbos`**, DBOS's own tables, once background workflows arrive. DBOS
+    makes and migrates it, nothing of ours writes to it, and Drizzle Kit
+    leaves it alone (`schemaFilter` in `drizzle.config.ts`).
+
+  `auth` and `internal` are declared in `schema.ts` and made by the first
+  migration. The upgrade test's sample rows fill all three of ours
+  (`SCHEMAS` in `tests/support/fill.ts`).
 
 ### Migrations
 
