@@ -117,8 +117,24 @@ export function databaseStatus(found: Finding): Status {
     }
 }
 
-// Storage and workflows aren't checked live: the page says where they are
-// instead, which differs between the dev server and a build
+// Sign-in, Storage and workflows aren't checked live: the page says where
+// they are instead, which differs between the dev server and a build
+
+export function signInStatus(): Status {
+    if (IN_DEVELOPMENT) {
+        return {
+            tone: "fact",
+            label: "Codes shown on the page",
+            detail: "A dev server emails nothing"
+        }
+    } else {
+        return {
+            tone: "fact",
+            label: "Emailed by Superforge Infra",
+            detail: "With INFRA_SECRET_KEY, not checked live"
+        }
+    }
+}
 
 export function storageStatus(): Status {
     if (IN_DEVELOPMENT) {

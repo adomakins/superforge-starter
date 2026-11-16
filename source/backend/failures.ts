@@ -9,14 +9,26 @@ import type { z } from "zod"
 
 /**
  * Answers `status` with a failure: `reason` for a program to branch on,
- * `message` for a person. The typed client knows the reason, so a page
- * can tell one failure from another.
+ * `message` for a person, and any `details` a caller can act on, like a
+ * 429's `retry_after` (utilities/schemas/failures.ts has the ones a page
+ * reads). The typed client knows the reason and the details, so a page can
+ * tell one failure from another.
  */
 export function failure<
     Reason extends string,
-    Status extends ContentfulStatusCode
->(context: Context, status: Status, reason: Reason, message: string) {
-    return context.json({ error: { reason, message } }, status)
+    Status extends ContentfulStatusCode,
+    Details extends Record<string, string | number | boolean> = Record<
+        never,
+        never
+    >
+>(
+    context: Context,
+    status: Status,
+    reason: Reason,
+    message: string,
+    details?: Details
+) {
+    return context.json({ error: { ...details, reason, message } }, status)
 }
 
 /**

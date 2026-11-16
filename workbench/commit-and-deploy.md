@@ -187,10 +187,34 @@ create tokens, change repository settings or touch DNS: the steps marked
    new one, then re-run the failed job (`gh run rerun <id> --failed`) and
    the push deploys.
 5. **(The human)** The `main` ruleset (above).
-6. Merge to `main`. The push's CI applies the configuration, and Railway
-   deploys it. Open the service's address: the home page loads, and (on
-   the placeholder page) its line shows the API answering and the database
-   connected.
+6. **(The human)** Sign-in, through Superforge Infra
+   (`source/backend/infra/README.md`). On superforge.studio's dashboard,
+   the Infra tab:
+   1. Make a project for this app, named as its sign-in emails should say
+      it (`Acme Plumbing <sign-in@system.superforge.studio>`).
+   2. Add its domains: the service's Railway address
+      (`<name>.up.railway.app`) and its custom domain, if it has one. A
+      sign-in email links back only to a domain on this list, and holds
+      the code alone otherwise.
+   3. Make a secret key (`sf_secret_…`), and set it as `INFRA_SECRET_KEY`
+      on the `app` service, in Railway's dashboard (the service's
+      Variables). `.railway/railway.ts` keeps it with `preserve()`. Until
+      it's set, the site works but sign-in answers that it's down.
+   4. For development, a test key (`sf_test_…`) as `INFRA_TEST_KEY` in the
+      checkout's `.env` (`.env.example`). Optional: without one, a dev
+      server signs in through a stand-in.
+
+   The key is shown once. To check it reached Infra:
+
+   ```bash
+   curl -H "Authorization: Bearer <the key>" https://infra.superforge.studio/v1/project
+   ```
+
+   It answers the project and `"mode": "live"`.
+7. Merge to `main`. The push's CI applies the configuration, and Railway
+   deploys it. Open the service's address: the home page loads, (on the
+   placeholder page) its line shows the API answering and the database
+   connected, and `/sign-in` emails a code.
 
 Nothing for cloud agents: an agent needs no credential to develop, test or
 run `pnpm check`, since `pnpm dev` and the tests run against the checkout's
@@ -218,6 +242,11 @@ service's `*.up.railway.app` target, and a TXT record at `_railway-verify`.
 On Cloudflare, make the CNAME **DNS only (gray cloud), not proxied**, so
 Railway's CDN is the one cache in front of the app. Railway issues the
 certificate within minutes; `railway domain status <id>` shows it.
+
+**(The human)** adds the custom domain to the app's project on
+superforge.studio's dashboard too (the Infra tab), so sign-in emails link
+back to it ("Setting up Railway", step 6). Until it's there, they hold the
+code alone, and signing in still works.
 
 ## Caching
 
@@ -268,11 +297,13 @@ The server's configuration is Railway variables on the app's service,
 named in `.railway/railway.ts`: `DATABASE_URL` (a reference to the
 database's), the `Storage` bucket's S3 credentials as `STORAGE_*`
 (references to the bucket's), and any secret as `preserve()`, whose value
-the human sets in Railway's dashboard. A new one goes in the file first,
+the human sets in Railway's dashboard, like `INFRA_SECRET_KEY`, sign-in's
+key ("Setting up Railway", step 6). A new one goes in the file first,
 since the file owns every variable on the service (above), and a new
 secret is named in the PR so the human sets it before the merge. Never put a secret's value in the
 file, and never commit one: `.env*` is ignored for that reason.
 
 A dev server needs none of them: it uses the checkout's own Postgres,
-keeps files in the checkout's `.storage/` folder, and reads anything else
-from the shell that started it.
+keeps files in the checkout's `.storage/` folder, signs in through Infra
+with a test key from the checkout's `.env`, or a stand-in without one, and
+reads anything else from the shell that started it.

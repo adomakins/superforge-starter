@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router"
 import { cn } from "cn"
 import { RotateCw } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
@@ -10,6 +11,7 @@ import {
     databaseStatus,
     type Status,
     StatusLine,
+    signInStatus,
     storageStatus,
     type Tone,
     websiteStatus,
@@ -29,20 +31,16 @@ type Station = {
     what: string
     path?: string
     status?: Status
+    // A page of the app's that shows this part working
+    page?: { to: "/sign-in"; label: string }
     shape: "origin" | "stop" | "branch" | "planned"
     // Which part this is, when a failed check can be about it
     checks?: Recovery["part"]
 }
 
-// The parts coming to Foundation, in the order they're expected to ship:
-// sign-in first, and the dashboard, which needs it, after
+// The parts coming to Foundation, in the order they're expected to ship: the
+// dashboard, behind sign-in
 const PLANNED: Station[] = [
-    {
-        name: "Sign-in",
-        kind: "Superforge Infra",
-        what: "Your customers and staff sign in.",
-        shape: "planned"
-    },
     {
         name: "Dashboard",
         what: "Who can sign in, and the work running in the background.",
@@ -53,7 +51,7 @@ const PLANNED: Station[] = [
 // Where the API's stop and the database's are on the line: the first the
 // check can find broken, and the last it runs to
 const API_POSITION = 2
-const DATABASE_POSITION = 5
+const DATABASE_POSITION = 6
 
 // How long the pulse takes over each stretch of line it runs. The check
 // itself often answers in a few milliseconds; the stops wait for the pulse
@@ -104,6 +102,15 @@ export function LineMap({ className }: { className?: string }) {
             status: apiStatus(seen),
             shape: "stop",
             checks: "api"
+        },
+        {
+            name: "Sign-in",
+            kind: "Superforge Infra",
+            what: "Your customers and staff sign in with a code or a link by email. No passwords.",
+            path: "source/backend/auth/",
+            page: { to: "/sign-in", label: "Try signing in" },
+            status: signInStatus(),
+            shape: "branch"
         },
         {
             name: "Storage",
@@ -356,6 +363,14 @@ function StationRow({
                 <p className="text-pretty text-muted-foreground text-sm">
                     {station.what}
                 </p>
+                {station.page !== undefined && (
+                    <Link
+                        to={station.page.to}
+                        className="w-fit text-sm underline decoration-foreground/40 underline-offset-4 hover:decoration-foreground"
+                    >
+                        {station.page.label}
+                    </Link>
+                )}
                 {station.path !== undefined && (
                     <code className="font-mono text-foreground/70 text-xs">
                         {station.path}

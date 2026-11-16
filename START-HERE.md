@@ -62,7 +62,8 @@ is drawn with ([shadcn's theming](https://ui.shadcn.com/docs/theming)).
 - **Logo and favicon.** Put the logo in `public/`, replace
   `public/favicon.svg` with the mark (an SVG with a `<title>`), and
   replace the placeholder cube in `source/frontend/routes/index.tsx`'s
-  header (the favicon, in an `<img>`) with the logo.
+  header (the favicon, in an `<img>`) with the logo, and in
+  `source/frontend/routes/sign-in.tsx`'s, beside "Your business".
 
 Read `workbench/designing.md` before this step and the next: it lists the
 habits that make a site look generated, and the checks the page has to
@@ -80,6 +81,12 @@ there to show the owner what the codebase has and that it runs; it isn't
 for visitors. Delete `source/frontend/components/welcome/`, which only it
 uses, and keep `source/backend/health/`, which Railway's healthcheck
 needs.
+
+Keep the sign-in page, `source/frontend/routes/sign-in.tsx`, where the
+business's customers and staff will sign in, and where its emails link:
+put the business's name in its header in place of "Your business", and
+its words in the business's voice. Link to it from the home page only if
+visitors should see it yet.
 
 ## 4. Write PRODUCT.md and DESIGN.md
 
@@ -125,10 +132,13 @@ and `LICENSE` too.
 pnpm format && pnpm check
 ```
 
-Then `pnpm dev` and look at the home page at http://localhost:3000, on a
-computer's width and a phone's, in light and dark, against the checks in
-`workbench/designing.md`. When it's right, delete
-this file and `CLAUDE.md`'s first section, commit on a branch, and follow
-`workbench/commit-and-deploy.md` to put it on Railway: its "Setting up
-Railway" section is the one-time setup, which needs the owner for a token
-and, if there's a domain, its DNS.
+Then `pnpm dev` and look at the home page at http://localhost:3000, and
+the sign-in page at http://localhost:3000/sign-in, on a computer's width
+and a phone's, in light and dark, against the checks in
+`workbench/designing.md`. Signing in works there with nothing set up: a
+dev server emails nothing, and shows the code on the page. When it's
+right, delete this file and `CLAUDE.md`'s first section, commit on a
+branch, and follow `workbench/commit-and-deploy.md` to put it on Railway:
+its "Setting up Railway" section is the one-time setup, which needs the
+owner for a token, for the app's project and its key on Superforge Infra,
+which sends the sign-in emails, and, if there's a domain, its DNS.

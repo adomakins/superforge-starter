@@ -1,9 +1,11 @@
 import { Hono } from "hono"
 import { appDatabase } from "@/database"
 import { appStorage } from "@/database/storage"
+import { authRoutes } from "./auth/routes"
 import type { ApiEnvironment } from "./context"
 import { answerNotFound, answerUnexpected } from "./failures"
 import { healthRoutes } from "./health/routes"
+import { appInfra } from "./infra"
 import { dbosWorkflows } from "./workflows/engine"
 
 /**
@@ -18,15 +20,16 @@ export function apiWith(variables: () => ApiEnvironment["Variables"]) {
             .basePath("/api")
 
             // The database on `context.var.database` for every route, the
-            // Storage bucket on `context.var.storage`, and the workflows'
-            // starter on `context.var.workflows`. Nothing under /api is kept
-            // in Railway's cache (source/node.ts), so each request reaches
-            // the server.
+            // Storage bucket on `context.var.storage`, the workflows'
+            // starter on `context.var.workflows`, and Infra on
+            // `context.var.infra`. Nothing under /api is kept in Railway's
+            // cache (source/node.ts), so each request reaches the server.
             .use(async (context, next) => {
-                const { database, storage, workflows } = variables()
+                const { database, storage, workflows, infra } = variables()
                 context.set("database", database)
                 context.set("storage", storage)
                 context.set("workflows", workflows)
+                context.set("infra", infra)
                 await next()
                 context.header("Cache-Control", "no-store")
             })
@@ -38,14 +41,18 @@ export function apiWith(variables: () => ApiEnvironment["Variables"]) {
 
             // Whether the server can reach its database
             .route("/", healthRoutes)
+
+            // Signing in, through Infra, and out, under /auth
+            .route("/", authRoutes)
     )
 }
 
-/** The server's API, on its database, bucket and workflows. */
+/** The server's API, on its database, bucket, workflows and Infra. */
 export const api = apiWith(() => ({
     database: appDatabase(),
     storage: appStorage(),
-    workflows: dbosWorkflows
+    workflows: dbosWorkflows,
+    infra: appInfra()
 }))
 
 export type AppType = typeof api

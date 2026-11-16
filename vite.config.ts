@@ -25,7 +25,10 @@ export default defineConfig({
             // Every page is written out as HTML at build time, found by
             // following links from the home page. Only /api, and anything
             // that isn't a page, runs on request (source/server.ts).
-            prerender: { enabled: true, crawlLinks: true }
+            prerender: { enabled: true, crawlLinks: true },
+            // And /sign-in, whatever links to it: the email's link lands
+            // there, so it's a page even once the home page doesn't link it
+            pages: [{ path: "/sign-in" }]
         }),
         viteReact(),
         // A running dev server counts as using this checkout's Postgres, so

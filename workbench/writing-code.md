@@ -86,6 +86,8 @@ matters:
     context.ts      what every route sees on its context
     failures.ts     the one failure shape: failure(), validated()
     workflows/      DBOS, for background work (its README has the rules)
+    infra/          Superforge Infra, the one wrapper for calling it
+    auth/           signing in through Infra, the sessions, and signedIn
     <feature>/      one folder per feature, like health/
       routes.ts     Hono: check the input, call an operation, answer
       check.ts      its operations, a file per verb (create.ts, find.ts)
@@ -141,8 +143,9 @@ matters:
   a route. The wrapper owns its credential, its timeouts, its retries and
   its pacing, parses what the service sends with zod, logs each call's
   outcome, and answers an `OperationResult` for the failures its callers
-  handle. A test hands its callers a fake of
-  it.
+  handle. A test hands its callers a fake of it. Superforge Infra's is
+  `backend/infra/`, on `context.var.infra`, with a stand-in the tests and
+  a dev server without a key use.
 - **A table or a column** → `source/database/schema.ts`, with a migration
   from `pnpm database:generate` ([Migrations](#migrations)).
 - **A new React component** → a folder of `source/frontend/components/`
@@ -153,8 +156,15 @@ matters:
   sign-in, each made when its first component arrives.
 - **A screen behind sign-in** → a route under
   `source/frontend/routes/dashboard/`, drawn in the browser (`ssr: false`)
-  and left out of the prerender, since it changes per visitor. Public pages
-  stay prerendered.
+  and left out of the prerender, since it changes per visitor, which knows
+  who's signed in from `useSession()` (`frontend/queries/auth.ts`). Public
+  pages stay prerendered, like `/sign-in` itself.
+- **A route that needs the user** → `signedIn` before its handler
+  (`backend/auth/signed-in.ts`), which answers 401 `signed-out` without a
+  live session and puts the user on `context.var.user` with one;
+  `maybeSignedIn` for a route a visitor may call too, with the user or
+  null. Nothing else reads the session's cookie or `auth.sessions`, so
+  who's signed in is decided in one place.
 - **Something that runs in the background** → a workflow, in its
   feature's `workflows.ts`, listed in `backend/workflows/index.ts`, and
   started from a route through `context.var.workflows`
@@ -206,7 +216,7 @@ There's **one database, Postgres**, on Railway, queried with Drizzle
 
 |                       | Postgres                                                                    |
 | --------------------- | --------------------------------------------------------------------------- |
-| Holds                 | no tables yet: `schema.ts` has the first one's shape in its header          |
+| Holds                 | the users, in `public`, and their sessions, in `auth` (`backend/auth/`)     |
 | And                   | DBOS's, the workflows' runs and steps, in `dbos` (`backend/workflows/`)     |
 | Schema                | `source/database/schema.ts`                                                 |
 | New migration         | `pnpm database:generate`, into `source/database/migrations/`                |
@@ -265,10 +275,13 @@ against `now` and `fromNow` from `time.ts`.
   and who sees them, and there's never a fifth, nor one per feature
   (features are folders in code):
   - **`public`**, the business's own data, whatever the app is built to
-    do: `pgTable(...)`.
-  - **`auth`**, who can get in: users, sessions, sign-in codes and API
-    tokens: `auth.table(...)`. They're the most sensitive rows, kept apart
-    so a read-only role can be given everything but them.
+    do: `pgTable(...)`. The users are here: they're the business's
+    customers and staff, whom its other tables point at
+    (`references(() => users.id)`).
+  - **`auth`**, what lets someone in: the sessions, and API tokens later:
+    `auth.table(...)`. They're the most sensitive rows, since one is as
+    good as a password, kept apart so a read-only role can be given
+    everything but them. The sign-in codes aren't here: Infra keeps them.
   - **`internal`**, the rest of the machinery, what no person sees, like
     an error log or rate limits: `internal.table(...)`.
   - **`dbos`**, DBOS's own tables, once background workflows arrive. DBOS
@@ -374,14 +387,14 @@ statement.
   through Vite's module runner, so it can use the `@/` paths). **Every
   table gets a seeder there, in the same change that adds the table**,
   written out by hand, which replaces its rows, so seeding again is safe,
-  and covers every state a screen shows. A table whose rows nothing should
-  make up, like sign-in's codes, goes in `UNSEEDED` instead, with why. The
+  and covers every state a screen shows, as `seed/users.ts` does for the
+  users and their sessions. A table whose rows nothing should make up,
+  like a log a job writes, goes in `UNSEEDED` instead, with why. The
   seeded rows are what each branch's migrations first run over, in every
   checkout's database as `pnpm dev` starts, so an unseeded table is one a
   migration is never tried on before CI. Its test seeds an empty database,
   and fails on a table that's in neither, so a schema change that breaks
-  the seed, or a table without one, fails `pnpm check`. There are none
-  until the first table.
+  the seed, or a table without one, fails `pnpm check`.
 - **Production's** is in Railway's dashboard: the Postgres service's Data
   tab. It's only on Railway's private network, so a script that writes to
   it runs on the app's service, with `railway ssh --service app --
@@ -463,6 +476,14 @@ on it.
 - **The dev server only ever uses the checkout's database**, whatever
   `DATABASE_URL` says (`appDatabase()`), so it can't reach production's by
   accident.
+- **Signing in works with nothing set up**: a dev server with no Infra
+  test key signs in through an in-memory stand-in, which emails nothing
+  and shows the code and the link on the page. With a test key of the
+  project's (`INFRA_TEST_KEY` in the checkout's `.env`, from
+  `.env.example`), it goes through Infra's test mode instead, the same
+  calls production makes, still emailing nothing. A worktree with no
+  `.env` of its own reads its main checkout's. A dev server never takes a
+  secret key, so it can't email real people (`source/backend/infra/`).
 - **`pnpm preview`** runs the production build (`pnpm build` first) as
   Railway does, `source/node.ts` and all, on the checkout's database, at
   http://localhost:3001. **`pnpm smoke-test`** does it on a new, empty
@@ -490,9 +511,12 @@ migration was applied to once that run (`setup.ts`, vitest's global setup),
 and drops the copy when the test finishes. So a route is tried on real rows
 through the whole API, with `testApi()` (`source/backend/tests/support/api.ts`):
 the API as the server mounts it, on a database of the test's own, the
-bucket's bytes in memory, and the workflows recorded rather than run, in
-`started`, called through the typed client, as
-`source/backend/health/tests/routes.test.ts` does. A workflow that needs
+bucket's bytes in memory, the workflows recorded rather than run, in
+`started`, and Infra's stand-in, called through the typed client, as
+`source/backend/health/tests/routes.test.ts` does. A route that needs
+someone signed in gets them through the stand-in, as
+`source/backend/auth/tests/routes.test.ts` does: its sign-ins answer
+their code. A workflow that needs
 DBOS itself is tested as `source/backend/workflows/tests/engine.test.ts`
 is. The server is the checkout's own, here and in CI, which the setup
 starts when it isn't running.

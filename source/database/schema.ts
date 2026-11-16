@@ -1,10 +1,7 @@
 // Drizzle table definitions (Postgres). This file is the source of truth for
 // the schema: change it, run `pnpm database:generate`, and commit the
-// migration with it (workbench/writing-code.md, "Data"). There are no tables
-// yet; the first one starts like this:
-//
-//   import { pgTable, text } from "drizzle-orm/pg-core"
-//   import { id, timestamp } from "./columns"
+// migration with it (workbench/writing-code.md, "Data"). A table of the
+// business's own starts like `users`, below:
 //
 //   export const customers = pgTable("customers", {
 //       id: id(),
@@ -24,17 +21,50 @@
 //   line in its UNSEEDED saying why not, which seed/tests/ checks.
 // - A table goes in one of four Postgres schemas, by who owns its rows and
 //   who sees them, never one per feature (features are folders in code):
-//   - `public`: the business's own data, whatever the app is built to do.
-//     A table here is `pgTable(...)`.
-//   - `auth`: who can get in: users, sessions, sign-in codes and API
-//     tokens. The most sensitive rows, kept apart so a read-only role can
-//     leave them out. A table here is `auth.table(...)`.
+//   - `public`: the business's own data, whatever the app is built to do,
+//     its users among it: they're its customers and staff, whom its other
+//     tables point at. A table here is `pgTable(...)`.
+//   - `auth`: what lets someone in: their sessions, and API tokens later.
+//     The most sensitive rows, since one is as good as a password, kept
+//     apart so a read-only role can leave them out. A table here is
+//     `auth.table(...)`. The sign-in codes aren't here: Infra keeps them.
 //   - `internal`: the rest of the machinery, what no person sees, like an
 //     error log or rate limits. A table here is `internal.table(...)`.
 //   - `dbos`: DBOS's own tables, the workflows' runs and their steps
 //     (backend/workflows/), which it makes and migrates itself. Nothing
 //     here writes to it, and it isn't declared below.
-import { pgSchema } from "drizzle-orm/pg-core"
+import { index, pgSchema, pgTable, text, uuid } from "drizzle-orm/pg-core"
+import { id, timestamp } from "./columns"
 
 export const auth = pgSchema("auth")
 export const internal = pgSchema("internal")
+
+// The business's customers and staff, everyone who can sign in: signing in
+// for the first time makes the row (backend/auth/sign-in.ts). Infra proves
+// the address is theirs, and keeps nothing of them.
+export const users = pgTable("users", {
+    id: id(),
+    // Trimmed and lowercased as it comes in, so the unique constraint
+    // catches case variants
+    email: text().notNull().unique(),
+    // When they last signed in, or null for someone who never has, like a
+    // user added by hand before they do
+    signed_in_at: timestamp(),
+    created_at: timestamp().notNull().defaultNow()
+})
+
+// A browser's sign-in, which its `session` cookie holds the token for
+// (backend/auth/sessions.ts). Only the token's SHA-256 is kept. It lasts 30
+// days from when it was last renewed, and signing out deletes it.
+export const sessions = auth.table(
+    "sessions",
+    {
+        token_hash: text().primaryKey(),
+        user_id: uuid()
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        expires_at: timestamp().notNull(),
+        created_at: timestamp().notNull().defaultNow()
+    },
+    (table) => [index("sessions_user_id_index").on(table.user_id)]
+)
