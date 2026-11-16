@@ -23,7 +23,9 @@
 # reading production's secrets among it, and a job on a PR runs the PR's own
 # code. The apply refuses a destructive change (deleting a service, a volume
 # or a variable), which a human applies by hand
-# (workbench/commit-and-deploy.md, "CI and deploys").
+# (workbench/commit-and-deploy.md, "CI and deploys"). Until the secret is
+# set, the apply skips with a notice rather than failing, so a new copy's
+# first pushes pass before it has a Railway project.
 name: CI
 
 on:
@@ -120,11 +122,17 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: npm install --global @railway/cli@5.71.0
+            # Skips without the secret, which a new copy doesn't have until
+            # its owner sets Railway up (workbench/commit-and-deploy.md,
+            # "Setting up Railway"). Once Railway is set up, a push that
+            # skips here deploys without its configuration applied, so the
+            # secret stays set; a token that's revoked or expired still
+            # fails the apply, and Railway deploys nothing.
             - name: Apply .railway/railway.ts
               run: |
                   if [ -z "$RAILWAY_TOKEN" ]; then
-                      echo "::error::The RAILWAY_TOKEN secret isn't set: a project token for Railway's production environment"
-                      exit 1
+                      echo "::notice::Skipped: the RAILWAY_TOKEN secret isn't set yet. Set a project token for Railway's production environment to apply .railway/railway.ts on each push."
+                      exit 0
                   fi
                   railway config apply --yes
               env:

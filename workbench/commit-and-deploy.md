@@ -68,7 +68,10 @@ merging" (0 approvals) and "Require status checks to pass" with `check`.
   environment, read production's secrets among it, and a job on a PR runs
   the PR's own code. So a PR shows no preview of what it changes on
   Railway: the human runs `railway config plan` in a checkout linked with
-  `railway link`, and an agent sees a change once it merges.
+  `railway link`, and an agent sees a change once it merges. Until the
+  repository has the `RAILWAY_TOKEN` secret ("Setting up Railway", below),
+  it skips with a notice, so a new copy's pushes pass before it has a
+  Railway project.
 
 **The workflow holds itself to a few rules**: its token can only read the
 code (`permissions`), each job stops after 15 minutes rather than GitHub's
@@ -172,11 +175,13 @@ create tokens, change repository settings or touch DNS: the steps marked
    gh secret set RAILWAY_TOKEN
    ```
 
-   It asks for the value, so it never lands in the shell's history. **Until
-   it's set, and whenever it's revoked or expires, `railway-apply` fails on
-   every push, so Railway deploys nothing** (Wait for CI): set it, then
-   re-run the failed job (`gh run rerun <id> --failed`) and the push
-   deploys.
+   It asks for the value, so it never lands in the shell's history. Until
+   it's set, `railway-apply` skips with a notice. **Once Railway is set up,
+   keep it set**: a push that skips deploys its code without applying its
+   configuration. **If the token is revoked or expires, `railway-apply`
+   fails on every push, so Railway deploys nothing** (Wait for CI): set a
+   new one, then re-run the failed job (`gh run rerun <id> --failed`) and
+   the push deploys.
 5. **(The human)** The `main` ruleset (above).
 6. Merge to `main`. The push's CI applies the configuration, and Railway
    deploys it. Open the service's address: the home page loads, and its

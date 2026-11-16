@@ -111,6 +111,11 @@ short, lowercase name for the business (like `acme-plumbing`):
 - `README.md`: its title and first paragraph, and the "This template"
   section, which goes.
 
+Leave `.superforge/superforge.json` as it is: its `starter-template` is
+the template this codebase came from, which updates read
+(`workbench/updating.md`), not this codebase's name. Keep `CHANGELOG.md`
+and `LICENSE` too.
+
 ## 6. Check it, and ship it
 
 ```bash
