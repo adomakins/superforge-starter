@@ -1,110 +1,79 @@
-import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
-import { cn } from "cn"
-import { healthQuery } from "@/frontend/queries/health"
+import { ArrowUpRight } from "lucide-react"
+import { EnvironmentChip } from "@/frontend/components/welcome/environment"
+import { LineMap } from "@/frontend/components/welcome/line-map"
+import { NextStops } from "@/frontend/components/welcome/next-stops"
+import { PromptChip } from "@/frontend/components/welcome/prompt-chip"
 
 export const Route = createFileRoute("/")({
     component: Home
 })
 
-// What's in the codebase, one line each. START-HERE.md replaces this page
-// with the business's own.
-const PARTS = [
-    {
-        name: "Website",
-        detail: "TanStack Start, every page prerendered, built from shadcn's components"
-    },
-    {
-        name: "API",
-        detail: "Hono under /api, called through a typed client and TanStack Query"
-    },
-    {
-        name: "Database",
-        detail: "Postgres with Drizzle, every migration checked before it ships"
-    },
-    {
-        name: "Workflows",
-        detail: "DBOS, for background work that picks up where it stopped"
-    },
-    {
-        name: "Deploys",
-        detail: "Railway, from each merge to main, once CI has passed"
-    },
-    {
-        name: "Tests",
-        detail: "Vitest on a real Postgres, with a database of each test's own"
-    }
+// The template's own home page: the app as a line, with the health check
+// running it, and what to do next. START-HERE.md's step 3 replaces this page
+// with the business's own, and deletes components/welcome/ with it.
+
+// Where the docs are, for the footer
+const DOCS = [
+    { path: "README.md", what: "what's in it, and how to run it" },
+    { path: "CLAUDE.md", what: "what Claude reads before every change" },
+    { path: "workbench/", what: "writing code, designing, shipping, updating" },
+    { path: "CHANGELOG.md", what: "Foundation's releases, newest first" }
 ] as const
 
 function Home() {
     return (
-        <main className="mx-auto flex min-h-screen max-w-3xl flex-col px-6 py-10 sm:py-16">
-            <header className="flex items-center gap-2.5">
-                {/* The favicon, which follows the device's theme itself */}
-                <img src="/favicon.svg" alt="" className="size-5" />
-                <span className="font-medium text-sm">Your business</span>
+        <main className="mx-auto flex max-w-5xl flex-col gap-12 px-5 py-6 sm:px-8 sm:py-10">
+            <header className="flex items-center justify-between gap-4">
+                <span className="flex items-center gap-2.5">
+                    {/* The favicon, which follows the device's theme itself */}
+                    <img src="/favicon.svg" alt="" className="size-5" />
+                    <span className="font-medium text-sm">Your business</span>
+                </span>
+                <EnvironmentChip />
             </header>
 
-            <section className="flex flex-1 flex-col justify-center gap-8 py-16">
-                <p className="font-mono text-muted-foreground text-xs uppercase tracking-widest">
-                    Hello, world
-                </p>
-                <h1 className="max-w-xl text-balance font-semibold text-4xl leading-[1.05] tracking-tight sm:text-6xl">
-                    Your business, in one codebase.
+            <section className="flex max-w-2xl flex-col gap-3">
+                <h1 className="text-balance font-heading font-semibold text-3xl tracking-tight sm:text-4xl">
+                    One codebase, from the page to the database.
                 </h1>
-                <p className="max-w-lg text-pretty text-lg text-muted-foreground leading-relaxed">
-                    A website, an API and a database, in one repository you own.
-                    Open{" "}
-                    <code className="whitespace-nowrap rounded bg-muted px-1.5 py-0.5 font-mono text-foreground text-sm">
-                        START-HERE.md
-                    </code>{" "}
-                    with Claude to make it yours: your name, your colors, your
-                    words.
+                <p className="max-w-[58ch] text-pretty text-muted-foreground leading-relaxed">
+                    When this page opened, it asked your API whether the
+                    database was up. This is the line that question ran along,
+                    and the stops still being built.
                 </p>
-                <Status />
+                {/* Beside the line on a wide screen, the next stops say this */}
+                <p className="mt-2 flex flex-wrap items-center gap-2 text-sm lg:hidden">
+                    New here? Say
+                    <PromptChip prompt="start here" />
+                    to Claude.
+                </p>
             </section>
 
-            <ul className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2">
-                {PARTS.map((part) => (
-                    <li
-                        key={part.name}
-                        className="flex flex-col gap-1 bg-background p-5"
-                    >
-                        <span className="font-medium text-sm">{part.name}</span>
-                        <span className="text-muted-foreground text-sm">
-                            {part.detail}
-                        </span>
-                    </li>
-                ))}
-            </ul>
-        </main>
-    )
-}
+            <div className="grid gap-x-16 gap-y-12 lg:grid-cols-[minmax(0,1fr)_19rem]">
+                <LineMap />
+                <NextStops className="lg:sticky lg:top-10 lg:self-start" />
+            </div>
 
-// Whether the server and its database answer, asked from the browser, since
-// the page itself is prerendered and served before the server runs. A
-// failure says what the API said went wrong, and a request that got no
-// answer at all says so.
-function Status() {
-    const health = useQuery(healthQuery)
-    const state = health.isPending
-        ? { label: "Checking the server…", tone: "bg-muted-foreground" }
-        : health.data?.ok === true
-          ? { label: "Server and database are up", tone: "bg-success" }
-          : {
-                label: health.data?.error.message ?? "The server didn't answer",
-                tone: "bg-destructive"
-            }
-    return (
-        <p
-            role="status"
-            className="flex items-center gap-2 text-muted-foreground text-sm"
-        >
-            <span
-                aria-hidden
-                className={cn("size-2 rounded-full", state.tone)}
-            />
-            {state.label}
-        </p>
+            <footer className="flex flex-col gap-4 border-t pt-6 text-muted-foreground text-sm sm:flex-row sm:items-start sm:justify-between">
+                <ul className="flex flex-col gap-1.5">
+                    {DOCS.map((doc) => (
+                        <li key={doc.path}>
+                            <code className="font-mono text-foreground text-xs">
+                                {doc.path}
+                            </code>{" "}
+                            <span>{doc.what}</span>
+                        </li>
+                    ))}
+                </ul>
+                <a
+                    href="https://github.com/superforge-studio/starter-template"
+                    className="inline-flex shrink-0 items-center gap-1 underline-offset-4 hover:text-foreground hover:underline"
+                >
+                    Superforge Foundation
+                    <ArrowUpRight aria-hidden className="size-3.5" />
+                </a>
+            </footer>
+        </main>
     )
 }

@@ -75,9 +75,11 @@ business's own page: its name, the line from step 1, and what visitors
 should do next. Keep it one page for now; more pages are routes under
 `source/frontend/routes/`, linked from the home page. Then set the page's
 title and description in `source/frontend/routes/__root.tsx`'s `head`.
-The health check's status line on the placeholder page is there to show
-the deploy works; drop it from the business's page, and keep
-`source/backend/health/`, which Railway's healthcheck needs.
+The placeholder's line map, with the health check running down it, is
+there to show the owner what the codebase has and that it runs; it isn't
+for visitors. Delete `source/frontend/components/welcome/`, which only it
+uses, and keep `source/backend/health/`, which Railway's healthcheck
+needs.
 
 ## 4. Write PRODUCT.md and DESIGN.md
 

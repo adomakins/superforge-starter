@@ -188,9 +188,9 @@ create tokens, change repository settings or touch DNS: the steps marked
    the push deploys.
 5. **(The human)** The `main` ruleset (above).
 6. Merge to `main`. The push's CI applies the configuration, and Railway
-   deploys it. Open the service's address: the home page loads, and its
-   status line (on the placeholder page) says the server and database are
-   up.
+   deploys it. Open the service's address: the home page loads, and (on
+   the placeholder page) its line shows the API answering and the database
+   connected.
 
 Nothing for cloud agents: an agent needs no credential to develop, test or
 run `pnpm check`, since `pnpm dev` and the tests run against the checkout's

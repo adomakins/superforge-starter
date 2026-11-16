@@ -63,3 +63,11 @@ update from.
 - **CI in a new copy**: `railway-apply` skips with a notice until the
   repository has its `RAILWAY_TOKEN` secret, so a copy's first commits
   don't fail before Railway is set up.
+- **The home page**, a starting point: the app as a line, a stop for each
+  part (the website, the API, Storage and the workflows, the database),
+  drawn in the theme's main color, with the health check running down it
+  and what to tell Claude where it fails, the parts still to come as
+  dashed stops, and the next steps as sentences to say to Claude
+  (`routes/index.tsx`, `components/welcome/`). `queries/health.ts`'s
+  `healthQuery` answers the round trip's time beside the status. START-HERE
+  replaces the page and deletes `components/welcome/`.
