@@ -55,9 +55,10 @@ merging" (0 approvals) and "Require status checks to pass" with `check`.
   `code`) does with the build what a deploy does, on a new database of its
   own: `pnpm database:migrate` from empty, `pnpm start`, then
   `/api/health`, every prerendered page, a hashed asset and a missing page,
-  each with the status and cache header `source/node.ts` promises. So a
-  start that crashes, a migration that won't apply from empty, or a broken
-  cache header fails the PR, not the deploy.
+  each with the status and cache header `source/node.ts` promises, and
+  last, that the server launched its workflows. So a start that crashes, a
+  migration that won't apply from empty, a broken cache header or
+  workflows that never start fail the PR, not the deploy.
 - **`check`** is the gate: it passes once `code` and every shard of `tests`
   have. A failure shows on the PR and on the commit. Read why with
   `gh run list --limit 5` and `gh run view <id> --log-failed`. The `main`
@@ -93,12 +94,15 @@ deploys, and a push whose `check` or apply fails doesn't deploy. It builds
 with `pnpm build` (Railpack, on Node 22 from `engines` in `package.json`),
 then runs `pnpm database:migrate` before the new deployment starts, while
 the one before still serves (`source/database/migrate.ts`): every pending
-migration in one transaction, with a 10-second lock timeout. One that fails
-rolls back, and Railway stops the deploy with the current version still
-serving. Then it starts `pnpm start` (`source/node.ts`), and moves traffic
-to the new deployment only once `/api/health` answers, which needs the
-database, so one that doesn't start never serves. The old one gets SIGTERM,
-finishes its requests and exits. Read a deployment's logs with `railway
+migration in one transaction, with a 10-second lock timeout, then DBOS's
+own, in its `dbos` schema. One that fails rolls back, and Railway stops the
+deploy with the current version still serving. Then it starts `pnpm start`
+(`source/node.ts`), and moves traffic to the new deployment only once
+`/api/health` answers, which needs the database, so one that doesn't start
+never serves. Meanwhile its workflows wait at the gate the old one holds
+(`source/backend/workflows/README.md`). The old one gets SIGTERM, stops its
+workflows, which lets the new one's launch and carry on whatever runs were
+left, finishes its requests and exits. Read a deployment's logs with `railway
 logs`, in a checkout linked with `railway link`, or with the Railway MCP
 server.
 

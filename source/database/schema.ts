@@ -20,6 +20,8 @@
 //   makes them unique when that's natural.
 // - Every timestamp is a `timestamptz` to the millisecond (`timestamp()`),
 //   compared against `now` and `fromNow` from time.ts.
+// - Every table gets sample rows in seed/seed.ts in the same change, or a
+//   line in its UNSEEDED saying why not, which seed/tests/ checks.
 // - A table goes in one of four Postgres schemas, by who owns its rows and
 //   who sees them, never one per feature (features are folders in code):
 //   - `public`: the business's own data, whatever the app is built to do.
@@ -29,9 +31,9 @@
 //     leave them out. A table here is `auth.table(...)`.
 //   - `internal`: the rest of the machinery, what no person sees, like an
 //     error log or rate limits. A table here is `internal.table(...)`.
-//   - `dbos`: DBOS's own tables, which it makes and migrates itself once
-//     background workflows arrive. Nothing here writes to it, and it isn't
-//     declared below.
+//   - `dbos`: DBOS's own tables, the workflows' runs and their steps
+//     (backend/workflows/), which it makes and migrates itself. Nothing
+//     here writes to it, and it isn't declared below.
 import { pgSchema } from "drizzle-orm/pg-core"
 
 export const auth = pgSchema("auth")

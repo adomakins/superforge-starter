@@ -146,14 +146,19 @@ export function stopLocalServer() {
 /** Applies the branch's migrations to the app's database on it. */
 export async function migrateLocalDatabase() {
     await startLocalServer()
-    // Imported here, so `start` and `url` don't load Drizzle
+    // Imported here, so `start` and `url` don't load Drizzle, nor DBOS,
+    // which it migrates too, and which is slow to load
     const { migrateDatabase } = await import("../migrate.ts")
     return await migrateDatabase(localDatabaseUrl())
 }
 
 // Who Postgres runs as: whoever this is, or a `postgres` user when this is
 // root, since Postgres refuses to run as root
-type Owner = { uid?: number; gid?: number }
+const owner = z.object({
+    uid: z.number().optional(),
+    gid: z.number().optional()
+})
+type Owner = z.infer<typeof owner>
 
 function serverOwner(): Owner {
     if (process.getuid?.() !== 0) {
