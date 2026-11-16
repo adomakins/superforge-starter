@@ -89,13 +89,13 @@ try {
     await expectAnswer(base, "/api/health", 200, "no-store")
     await expectAnswer(base, "/no-page-here", 404, "no-store")
 
+    // 5. The workflows, which launch once the server is listening
+    await waitForWorkflows()
+
     // 6. Sign-in, which a build without INFRA_SECRET_KEY refuses, rather
     //    than falling back to the dev server's stand-in, which shows the
     //    code on the page (source/backend/infra/choose.ts)
     await expectSignInDown(base)
-
-    // 5. The workflows, which launch once the server is listening
-    await waitForWorkflows()
 } catch (error) {
     problems.push(error instanceof Error ? error.message : String(error))
 } finally {

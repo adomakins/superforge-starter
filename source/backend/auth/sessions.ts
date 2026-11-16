@@ -32,8 +32,10 @@ export type SessionUser = Pick<
 /**
  * Starts a session for this user, ending the one this browser had
  * (`replacing`, its cookie's token), and answers its token, for the
- * cookie. Their sessions that have run out are cleared away with it, so
- * the table only holds live ones.
+ * cookie. Their sessions that have run out are cleared away with it. A
+ * user who never signs in again leaves theirs, which no request accepts
+ * (`liveSession`): a workflow can prune them once there are enough to
+ * matter.
  */
 export async function startSession(
     database: Database,

@@ -20,9 +20,10 @@ const UNAVAILABLE = "Sign-in isn't working right now. Try again soon."
  * Signing in, under /api/auth, with no password: Infra emails a six-digit
  * code and a link, and says whose email the code or the link is when the
  * visitor brings one back (backend/infra/). The app keeps the user and the
- * session. Every route but the session's takes JSON, which a form on
- * another site can't send, and the cookie is SameSite=Lax, so another
- * site's page can't act as anyone (signed-in.ts).
+ * session. Starting and verifying take JSON, which a form on another site
+ * can't send; signing out takes no body, and the API refuses another
+ * site's form (`csrf()` in index.ts). The cookie is SameSite=Lax, so
+ * another site's page can't act as anyone (signed-in.ts).
  */
 export const authRoutes = new Hono<ApiEnvironment>()
     // Who's signed in, or null for a visitor: what every page asks
@@ -85,9 +86,9 @@ export const authRoutes = new Hono<ApiEnvironment>()
     })
 
     // Signs in with the code the visitor typed, or the link's token, which
-    // the sign-in page posts from the link's fragment (`/sign-in#<token>`),
-    // so it stays out of addresses and logs, and a mail scanner that opens
-    // the link spends nothing
+    // the sign-in page posts from the link's fragment (`/sign-in#<token>`)
+    // once the visitor presses to finish, so it stays out of addresses and
+    // logs, and a mail scanner that opens the link spends nothing
     .post(
         "/auth/verify",
         validated("json", sign_in_verify),

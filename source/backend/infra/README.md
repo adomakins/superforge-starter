@@ -24,8 +24,9 @@ own `/api`.
    localhost), from `sign-in@system.superforge.studio` under the project's
    name. A code and a link each work once, for 15 minutes, and a code for
    five tries.
-3. The visitor types the code, or opens the link, whose page posts the
-   token from the fragment. `POST /api/auth/verify` calls Infra's
+3. The visitor types the code, or opens the link and presses "Finish
+   signing in", which posts the token from the fragment: never as the page
+   loads, so a mail scanner that opens the link spends nothing. `POST /api/auth/verify` calls Infra's
    `POST /v1/sign-in/verify` with either, and Infra answers the email.
 4. The app finds or makes the user by that email, and starts a session in
    its own Postgres (`backend/auth/sign-in.ts`).

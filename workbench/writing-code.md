@@ -200,7 +200,12 @@ isn't there, 409 for a conflict, 503 for a dependency that's down.
   `failure(context, 404, found.error, "No such contact")`. The typed client
   knows each reason a route can answer.
 - **Input that doesn't fit** is answered by `validated()` itself: 400,
-  `invalid`, and `issues`, what didn't fit, field by field.
+  `invalid`, and `issues`, what didn't fit, field by field. A body that
+  isn't JSON at all is 400 `invalid` too, without `issues`.
+- **A form on another site** posting to the API is 403 `forbidden`
+  (`csrf()` in `index.ts`), unless the browser says it came from this site.
+  JSON, which a form can't send, and a request that sends no
+  `Content-Type`, like a script's bodiless POST, are left alone.
 - **A path no route answers** is 404 `not-found`, and **a route that
   throws** is 500 `unexpected`, logged (`index.ts` mounts both handlers).
   Throwing is for bugs, never for a failure a caller handles.

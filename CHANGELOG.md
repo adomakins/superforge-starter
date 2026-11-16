@@ -75,13 +75,21 @@ the app calls Infra for.
 - **The sign-in page**, a starting point: `routes/sign-in.tsx`, with its
   form in `components/site/sign-in-form.tsx` and its queries in
   `queries/auth.ts`. It's prerendered whatever links to it (`pages` in
-  `vite.config.ts`), since the email's link lands there. Its header says
+  `vite.config.ts`), since the email's link lands there. The link signs in
+  only once the visitor presses "Finish signing in", so a mail scanner that
+  opens it, even one that runs the page's script, spends nothing. Its header says
   "Your business" beside the favicon, as the template's home page did: a
   copy puts its name and logo there (`START-HERE.md`, steps 2 and 3).
 - **Failures**, machinery: the failure shape gains an optional
   `retry_after` (`utilities/schemas/failures.ts`), `failure()` takes
   details beside the reason, like a 429's, and `queries/failures.ts` has
-  `FailedRequest`, which a mutation throws, and `failureOf`.
+  `FailedRequest`, which a mutation throws, and `failureOf`. A body that
+  isn't JSON is answered 400 `invalid` rather than 500 `unexpected`
+  (`answerUnexpected` in `backend/failures.ts`).
+- **Another site's forms**, machinery: the API refuses a form posted from
+  another site, 403 `forbidden` (`csrf()` in `backend/index.ts`), so a
+  page elsewhere can't sign anyone out. JSON, and a request with no
+  `Content-Type`, are left alone.
 - **The home page's line**, a starting point: Sign-in is a stop on it,
   linking to `/sign-in` (`components/welcome/`). A copy that deleted the
   folder leaves this out.
@@ -90,8 +98,17 @@ the app calls Infra for.
   show anyone's code on the page.
 - **Docs**: `CLAUDE.md`, `README.md`, `START-HERE.md`,
   `workbench/writing-code.md` (signing in during development, `signedIn`,
-  the schemas' rule) and `workbench/commit-and-deploy.md` ("Setting up
-  Railway", step 6: the project on Infra, its domains and its keys).
+  the schemas' rule), `workbench/commit-and-deploy.md` ("Setting up
+  Railway", step 6: the project on Infra, its domains and its keys), and
+  `workbench/updating.md`, which leaves `routeTree.gen.ts` out of an
+  update and builds it again.
+
+Applying it: this is the first release that adds a page, and a copy's
+`updating.md` is still 0.1.0's, so leave
+`source/frontend/routeTree.gen.ts` out of the diff too
+(`':(exclude)source/frontend/routeTree.gen.ts'`), and run `pnpm build`
+after `pnpm install`, which writes it again with `/sign-in` and the copy's
+own pages.
 
 Flags:
 

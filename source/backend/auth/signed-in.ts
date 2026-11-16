@@ -48,14 +48,14 @@ export function clearSessionCookie(context: Context) {
     })
 }
 
-// Everywhere but plain-http localhost, where Safari won't keep a Secure
-// cookie: a dev server, or the build run with `pnpm preview`. Behind
-// Railway's proxy a request's own address says http, so the protocol alone
-// can't say.
+// Everywhere but plain http on this computer, or a dev server reached over
+// plain http from another, where a browser won't keep a Secure cookie: the
+// build run with `pnpm preview`, or `pnpm dev`. Behind Railway's proxy a
+// request's own address says http, so the protocol alone can't say.
 function secureCookie(request_url: string) {
     const { protocol, hostname } = new URL(request_url)
-    const local = hostname === "localhost" || hostname === "127.0.0.1"
-    return !(protocol === "http:" && local)
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(hostname)
+    return !(protocol === "http:" && (local || import.meta.env.DEV))
 }
 
 /**

@@ -1,5 +1,6 @@
 import { zValidator } from "@hono/zod-validator"
 import type { Context, ErrorHandler, NotFoundHandler } from "hono"
+import { HTTPException } from "hono/http-exception"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import type { z } from "zod"
 
@@ -71,13 +72,33 @@ export const answerNotFound: NotFoundHandler = (context) =>
 /**
  * A route that threw: a bug, or something it was never meant to handle,
  * since an expected failure is answered, not thrown. It's logged, and the
- * caller learns only that it failed.
+ * caller learns only that it failed. Hono's own refusals throw too, before
+ * the route runs, and are answered as what they are: a body that isn't
+ * JSON (400 `invalid`), or another site's form (403 `forbidden`, index.ts).
  */
 export const answerUnexpected: ErrorHandler = (error, context) => {
-    console.error("A route threw", {
-        method: context.req.method,
-        path: context.req.path,
-        error
-    })
-    return failure(context, 500, "unexpected", "Something went wrong")
+    const request = { method: context.req.method, path: context.req.path }
+    if (error instanceof HTTPException && error.status === 400) {
+        console.warn("A request's body couldn't be read", {
+            ...request,
+            message: error.message
+        })
+        return failure(
+            context,
+            400,
+            "invalid",
+            "The request doesn't fit what this route takes"
+        )
+    } else if (error instanceof HTTPException && error.status === 403) {
+        console.warn("A cross-site form was refused", request)
+        return failure(
+            context,
+            403,
+            "forbidden",
+            "Another site's form can't call this route"
+        )
+    } else {
+        console.error("A route threw", { ...request, error })
+        return failure(context, 500, "unexpected", "Something went wrong")
+    }
 }

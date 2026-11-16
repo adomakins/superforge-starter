@@ -40,7 +40,7 @@ const SEEDERS: Seeder[] = [seedUsers, seedSessions]
 /**
  * The tables that get no sample rows, each with why, by its name as a
  * seeder names it: bare in `public`, after its schema in another, like
- * `auth.sign_in_codes`.
+ * `internal.error_log`.
  */
 export const UNSEEDED: Record<string, string> = {}
 

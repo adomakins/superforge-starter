@@ -84,6 +84,9 @@ export const verifySignIn = mutationOptions({
         }
     },
     onSuccess: async (user, _input, _result, context) => {
+        // A session fetched before this sign-in, and answered after it,
+        // would put the visitor back
+        await context.client.cancelQueries({ queryKey: sessionQuery.queryKey })
         context.client.setQueryData(sessionQuery.queryKey, user)
     }
 })
@@ -100,6 +103,7 @@ export const signOut = mutationOptions({
         }
     },
     onSuccess: async (_data, _input, _result, context) => {
+        await context.client.cancelQueries()
         context.client.removeQueries()
         context.client.setQueryData(sessionQuery.queryKey, null)
     }

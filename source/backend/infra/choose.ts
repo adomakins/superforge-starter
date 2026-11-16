@@ -75,7 +75,9 @@ export function chooseInfra({
         })
         return { infra: unavailableInfra(), using: "nothing" }
     }
-    const { INFRA_SECRET_KEY, INFRA_URL: url = INFRA_URL } = parsed.data
+    const { INFRA_SECRET_KEY } = parsed.data
+    // Without a slash at the end, since each call's path starts with one
+    const url = (parsed.data.INFRA_URL ?? INFRA_URL).replace(/\/+$/, "")
 
     if (!development) {
         if (

@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
-import { expect, test, vi } from "vitest"
+import { expect, onTestFinished, test, vi } from "vitest"
 import type { ApiEnvironment } from "@/backend/context"
 import type { Infra } from "@/backend/infra"
 import { testApi } from "@/backend/tests/support/api"
@@ -64,6 +64,35 @@ test("signs in with the emailed code, making the user, and the session says who"
 
     const [row] = await database.select().from(users)
     expect(row?.signed_in_at).not.toBeNull()
+})
+
+test("the session's cookie is kept from scripts and other sites", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const { client } = await testApi()
+    const { code } = await emailed(client)
+    const verified = await client.api.auth.verify.$post({
+        json: { email: EMAIL, code }
+    })
+    const set = verified.headers.get("Set-Cookie") ?? ""
+    expect(set).toMatch(/HttpOnly/)
+    expect(set).toMatch(/SameSite=Lax/)
+    expect(set).toMatch(/Path=\//)
+    expect(set).toMatch(/Max-Age=2592000/)
+})
+
+test("a build never answers the code, whatever Infra says", async () => {
+    vi.stubEnv("DEV", false)
+    onTestFinished(() => {
+        vi.unstubAllEnvs()
+    })
+    const { client } = await testApi()
+    const response = await client.api.auth.start.$post({
+        json: { email: EMAIL }
+    })
+    expect(response.status).toBe(200)
+    if (response.status === 200) {
+        expect((await response.json()).development).toBeNull()
+    }
 })
 
 test("signs in with the email's link", async () => {
