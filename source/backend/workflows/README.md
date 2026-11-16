@@ -130,6 +130,43 @@ Never delete DBOS's rows by hand, nor write to its tables.
   and the gate 1. So a process holds at most 23, and the two running while
   a deploy goes out 46.
 
+## Reading runs
+
+The dashboard's Workflows screen shows every run as it runs, with its
+steps, what went wrong where one failed, and a way to run it again
+(`routes.ts`, under `/api/workflows`, for internal people only). It reads
+them through `context.var.workflows`, which asks DBOS's own functions,
+never its tables, which are DBOS's to change (`engine.ts`):
+
+- **`runs()`**, the latest hundred, newest first, through
+  `listWorkflows`, with each one's input and, for a failed one, its error.
+- **`run(id)`**, one with what it returned and each step it has
+  finished, through `listWorkflowSteps`. DBOS records a step once it has
+  returned, so a run that's working shows the steps before the one it's
+  on.
+- **`retry(id)`**, a failed or canceled run again, under the same id,
+  through `rewindWorkflow`: from the step it failed at, or just after the
+  last it finished, so the steps before keep what they returned and don't
+  run again. Fix whatever made it fail first.
+
+**A run's title** is its workflow's `title`, from its input, like "Tell the
+team about ada@example.com", or the workflow's name without one; give a
+new workflow a title, since it's what the screen lists.
+`runs.ts` turns what DBOS says into what the screen shows: a status in
+words (`queued`, `running`, `succeeded`, `failed`, `canceled`), times as
+ISO strings, and inputs and outputs as JSON text.
+
+## The sample
+
+**`tell-team-of-sign-up`** (`backend/users/workflows.ts`) is the
+template's example: a sign-in that makes someone new starts it, named for
+them so it runs once (`backend/auth/routes.ts`), and its three steps read
+them, find the business's own people, and send the notice, which goes to
+the logs until Superforge Infra can send email. `pnpm database:seed` puts
+real runs of it on the queue, for a dev server to run, rather than writing
+DBOS's rows. A copy keeps it, or deletes it with its line in `index.ts`
+and the start in `backend/auth/routes.ts`.
+
 ## When not to use one
 
 **Something short that's just due at a time** (a reminder, a poll) is a
@@ -141,7 +178,9 @@ off is still due, so the next process runs it.
 
 - **A route that starts one** is tested with `testApi()`
   (`backend/tests/support/api.ts`), whose `started` lists each run the
-  route started, with its input and id.
+  route started, with its input and id. A route that reads runs reads
+  what's in its `runs`, which a test can add to, like a failed run with its
+  steps, and `retried` lists each run it ran again.
 - **What a step does** is an operation's, tested as one, on a database of
   the test's own.
 - **The workflow itself**, when the order of its steps matters, runs on

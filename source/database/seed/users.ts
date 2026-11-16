@@ -69,24 +69,28 @@ const SAMPLE_SESSIONS = [
         email: "ada@example.com",
         token: "sample-session-ada",
         user_agent: CHROME_ON_A_MAC,
+        created_at: fromNow(-12 * DAY),
         expires_at: fromNow(28 * DAY)
     },
     {
         email: "ada@example.com",
         token: "sample-session-ada-phone",
         user_agent: SAFARI_ON_AN_IPHONE,
+        created_at: fromNow(-31 * DAY),
         expires_at: fromNow(20 * DAY)
     },
     {
         email: "grace@example.com",
         token: "sample-session-grace",
         user_agent: null,
+        created_at: fromNow(-60 * DAY),
         expires_at: fromNow(-15 * DAY)
     },
     {
         email: "maria.santos@example.com",
         token: "sample-session-maria",
         user_agent: SAFARI_ON_AN_IPHONE,
+        created_at: fromNow(-2 * HOUR),
         expires_at: fromNow(30 * DAY - 2 * HOUR)
     }
 ]
@@ -137,6 +141,7 @@ export const seedSessions: Seeder = async (transaction: Database) => {
                 .digest("hex"),
             user_id: owner.id,
             user_agent: session.user_agent,
+            created_at: session.created_at,
             expires_at: session.expires_at
         }
     })

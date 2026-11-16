@@ -87,8 +87,10 @@ matters:
     failures.ts     the one failure shape: failure(), validated()
     workflows/      DBOS, for background work (its README has the rules)
     infra/          Superforge Infra, the one wrapper for calling it
-    auth/           signing in through Infra, the sessions, and signedIn
-    <feature>/      one folder per feature, like health/
+    auth/           signing in through Infra, the sessions, signedIn and
+                    internalOnly, and who can sign in (access.ts)
+    <feature>/      one folder per feature, like health/, account/ and
+                    users/
       routes.ts     Hono: check the input, call an operation, answer
       check.ts      its operations, a file per verb (create.ts, find.ts)
       workflows.ts  its workflows, if it has background work
@@ -153,18 +155,26 @@ matters:
   <name>`, which `components.json` sends there), `states/` for what a
   screen shows while it's empty, loading or lost (`not-found.tsx`),
   `site/` for the public pages' and `dashboard/` for the screens behind
-  sign-in, each made when its first component arrives.
+  sign-in.
 - **A screen behind sign-in** → a route under
-  `source/frontend/routes/dashboard/`, drawn in the browser (`ssr: false`)
-  and left out of the prerender, since it changes per visitor, which knows
-  who's signed in from `useSession()` (`frontend/queries/auth.ts`). Public
-  pages stay prerendered, like `/sign-in` itself.
+  `source/frontend/routes/dashboard/`, drawn in the browser (`ssr: false`
+  on `dashboard/route.tsx`) and left out of the prerender (the `filter` in
+  `vite.config.ts`), since it changes per visitor, which knows who's
+  signed in from `useSession()` (`frontend/queries/auth.ts`). It sits in
+  the dashboard's frame (`components/dashboard/shell.tsx`): a list beside
+  the one chosen from it, chosen by an id in the address (`?run=`,
+  `?person=`), so Back and a shared link keep it. A screen for the
+  business's own people gets a place in the bar's switch (`SECTIONS`);
+  everyone else sees only `/dashboard/account` ([Roles](#roles-and-who-can-sign-in)).
+  Public pages stay prerendered, like `/sign-in` itself.
 - **A route that needs the user** → `signedIn` before its handler
   (`backend/auth/signed-in.ts`), which answers 401 `signed-out` without a
   live session and puts the user on `context.var.user` with one;
-  `maybeSignedIn` for a route a visitor may call too, with the user or
-  null. Nothing else reads the session's cookie or `auth.sessions`, so
-  who's signed in is decided in one place.
+  `internalOnly` for a route only the business's own people may call,
+  which answers 403 `not-internal` to anyone else; `maybeSignedIn` for a
+  route a visitor may call too, with the user or null. Nothing else reads
+  the session's cookie or `auth.sessions`, so who's signed in, and who
+  may see what, is decided in one place, whatever a page shows.
 - **Something that runs in the background** → a workflow, in its
   feature's `workflows.ts`, listed in `backend/workflows/index.ts`, and
   started from a route through `context.var.workflows`
@@ -177,6 +187,36 @@ matters:
   database means one package.
 - **Content** lives where it's published: a page's copy in its route, and
   copy more than one page shares in `source/utilities/`.
+
+### Roles and who can sign in
+
+**Everyone who can sign in is a row in `users`, with a `role`**: one of
+`ROLES` in `source/utilities/schemas/users.ts`, `internal` for the
+business's own people and `external` for everyone it serves.
+`INTERNAL_ROLES` says which roles see the business's side of the dashboard
+(the people, the workflows) and pass `internalOnly`; every other role sees
+only its own account.
+
+- **A new role**, like `technician` or `lead`, goes in `ROLES`, and in
+  `INTERNAL_ROLES` when it's one of the business's own. The column is text
+  with a check made from `ROLES` (`schema.ts`), not a Postgres enum, so
+  `pnpm database:generate` writes the migration that changes the check,
+  and a deploy can use the new role in the same transaction. Its name on
+  screen goes in `ROLE_NAMES` (`components/dashboard/people.tsx`).
+- **Permissions that don't nest**, like a technician who sees the
+  schedule but not the invoices, are a middleware beside `internalOnly`
+  that checks the role a route needs: still one role per person.
+- **Who can sign in** is `ACCESS` in `source/backend/auth/access.ts`,
+  which START-HERE.md sets: `sign_in: "anyone"` makes someone new at their
+  first sign-in, as `external`, and `"listed"` lets in only someone already
+  on the People screen (added by an internal person) or in
+  `internal_emails`. `internal_emails` are internal from their first
+  sign-in, like the owner's; after that, roles change on the People screen.
+  It's code, not a Railway variable, so a dev server signs in the way
+  production does. Routes read it from `context.var.access`, and a test
+  hands its own (`testApi({ access })`).
+- **No one changes or removes themselves**, so the business always has
+  someone who can change them back (`backend/users/`).
 
 ### How a route fails
 
@@ -221,7 +261,7 @@ There's **one database, Postgres**, on Railway, queried with Drizzle
 
 |                       | Postgres                                                                    |
 | --------------------- | --------------------------------------------------------------------------- |
-| Holds                 | the users, in `public`, and their sessions, in `auth` (`backend/auth/`)     |
+| Holds                 | the users, in `public`, with their roles, and their sessions, in `auth`     |
 | And                   | DBOS's, the workflows' runs and steps, in `dbos` (`backend/workflows/`)     |
 | Schema                | `source/database/schema.ts`                                                 |
 | New migration         | `pnpm database:generate`, into `source/database/migrations/`                |

@@ -8,6 +8,7 @@ import { type Finding, useFinding } from "./finding"
 import { type Recovery, RecoveryNote, recoveryFor } from "./recovery"
 import {
     apiStatus,
+    dashboardStatus,
     databaseStatus,
     type Status,
     StatusLine,
@@ -19,8 +20,8 @@ import {
 } from "./status"
 
 // The app as a transit line, a stop for each part, drawn in the theme's main
-// color: you, the website, the API with Storage and the workflows on
-// branches, and the database. The health check runs down it as a pulse each
+// color: you, the website, the API with sign-in, the dashboard, Storage and
+// the workflows on branches, and the database. The health check runs down it as a pulse each
 // time it's asked; a stop it passes through fills in, and where it can't
 // get through, the line turns red and the stop says what to do. The parts
 // still to come are stops on a dashed line.
@@ -32,26 +33,21 @@ type Station = {
     path?: string
     status?: Status
     // A page of the app's that shows this part working
-    page?: { to: "/sign-in"; label: string }
+    page?: { to: "/sign-in" | "/dashboard"; label: string }
     shape: "origin" | "stop" | "branch" | "planned"
     // Which part this is, when a failed check can be about it
     checks?: Recovery["part"]
 }
 
-// The parts coming to Foundation, in the order they're expected to ship: the
-// dashboard, behind sign-in
-const PLANNED: Station[] = [
-    {
-        name: "Dashboard",
-        what: "Who can sign in, and the work running in the background.",
-        shape: "planned"
-    }
-]
+// The parts coming to Foundation, in the order they're expected to ship, as
+// dashed stops at the end of the line. None, for now: each part on the line
+// is built.
+const PLANNED: Station[] = []
 
 // Where the API's stop and the database's are on the line: the first the
 // check can find broken, and the last it runs to
 const API_POSITION = 2
-const DATABASE_POSITION = 6
+const DATABASE_POSITION = 7
 
 // How long the pulse takes over each stretch of line it runs. The check
 // itself often answers in a few milliseconds; the stops wait for the pulse
@@ -110,6 +106,15 @@ export function LineMap({ className }: { className?: string }) {
             path: "source/backend/auth/",
             page: { to: "/sign-in", label: "Try signing in" },
             status: signInStatus(),
+            shape: "branch"
+        },
+        {
+            name: "Dashboard",
+            kind: "/dashboard",
+            what: "Your people see everyone who can sign in and the workflows as they run; everyone else, their own account.",
+            path: "source/frontend/routes/dashboard/",
+            page: { to: "/dashboard", label: "Open the dashboard" },
+            status: dashboardStatus(),
             shape: "branch"
         },
         {
@@ -178,22 +183,28 @@ export function LineMap({ className }: { className?: string }) {
                                 : null
                         }
                         stretch={
-                            <Stretch
-                                index={index}
-                                run={run}
-                                live={index < DATABASE_POSITION}
-                                planned={index >= DATABASE_POSITION}
-                                broken={index >= brokenFrom(seen)}
-                            />
+                            // The line ends at the database, unless there
+                            // are parts still to come after it
+                            index < DATABASE_POSITION || PLANNED.length > 0 ? (
+                                <Stretch
+                                    index={index}
+                                    run={run}
+                                    live={index < DATABASE_POSITION}
+                                    planned={index >= DATABASE_POSITION}
+                                    broken={index >= brokenFrom(seen)}
+                                />
+                            ) : null
                         }
                     />
                 ))}
-                <li className="relative grid grid-cols-[2rem_minmax(0,1fr)] gap-x-4 pb-6">
-                    <Stretch index={-1} run={run} planned />
-                    <p className="col-start-2 font-medium text-muted-foreground text-xs">
-                        Coming to Foundation
-                    </p>
-                </li>
+                {PLANNED.length > 0 && (
+                    <li className="relative grid grid-cols-[2rem_minmax(0,1fr)] gap-x-4 pb-6">
+                        <Stretch index={-1} run={run} planned />
+                        <p className="col-start-2 font-medium text-muted-foreground text-xs">
+                            Coming to Foundation
+                        </p>
+                    </li>
+                )}
                 {PLANNED.map((station, index) => (
                     <StationRow
                         key={station.name}

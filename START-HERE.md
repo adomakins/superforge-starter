@@ -37,6 +37,11 @@ Ask for each of these. The answers go into PRODUCT.md and DESIGN.md (step
    and what visitors should do next (call, book, email, or just know it's
    coming).
 10. **Its website address**, if it has a domain it wants this on.
+11. **Who will sign in**: its customers, who can sign up themselves, or
+    only its own team (an internal tool, or a site only its staff edit).
+12. **Its own people's email addresses**, starting with the owner's: they
+    see the whole dashboard (the people who can sign in, and the work
+    running in the background) from the first time they sign in.
 
 ## 2. Make it look like the business
 
@@ -63,13 +68,15 @@ is drawn with ([shadcn's theming](https://ui.shadcn.com/docs/theming)).
   `public/favicon.svg` with the mark (an SVG with a `<title>`), and
   replace the placeholder cube in `source/frontend/routes/index.tsx`'s
   header (the favicon, in an `<img>`) with the logo, and in
-  `source/frontend/routes/sign-in.tsx`'s, beside "Your business".
+  `source/frontend/components/site/business-mark.tsx`, the sign-in page's
+  and the dashboard's, with the business's name in place of "Your
+  business".
 
 Read `workbench/designing.md` before this step and the next: it lists the
 habits that make a site look generated, and the checks the page has to
 pass.
 
-## 3. Write the home page
+## 3. Write the home page, and say who signs in
 
 Replace `source/frontend/routes/index.tsx`'s placeholder with the
 business's own page: its name, the line from step 1, and what visitors
@@ -83,10 +90,26 @@ uses, and keep `source/backend/health/`, which Railway's healthcheck
 needs.
 
 Keep the sign-in page, `source/frontend/routes/sign-in.tsx`, where the
-business's customers and staff will sign in, and where its emails link:
-put the business's name in its header in place of "Your business", and
-its words in the business's voice. Link to it from the home page only if
-visitors should see it yet.
+business's customers and staff will sign in, and where its emails link,
+in the business's voice (its name is in `business-mark.tsx`, from step
+2). Link to it from the home page only if visitors should see it yet.
+
+Keep the dashboard too, `source/frontend/routes/dashboard/`, behind
+sign-in: the business's own people see everyone who can sign in and the
+work running in the background, and everyone else their own account.
+Then say who signs in, from step 1's answers, in `ACCESS` in
+`source/backend/auth/access.ts`:
+
+- **`sign_in`**: `"anyone"` when customers sign up themselves, and
+  `"listed"` when only the team signs in, so a stranger can't make an
+  account; the team then adds anyone else on the dashboard's People
+  screen.
+- **`internal_emails`**: the business's own people, the owner first, in
+  lowercase. They're `internal` from the first time they sign in, and
+  everyone else `external`. If the business has more kinds of people than
+  those two, like technicians and customers, add the roles to `ROLES` in
+  `source/utilities/schemas/users.ts` (`workbench/writing-code.md`,
+  "Roles and who can sign in").
 
 ## 4. Write PRODUCT.md and DESIGN.md
 
@@ -132,11 +155,13 @@ and `LICENSE` too.
 pnpm format && pnpm check
 ```
 
-Then `pnpm dev` and look at the home page at http://localhost:3000, and
-the sign-in page at http://localhost:3000/sign-in, on a computer's width
-and a phone's, in light and dark, against the checks in
+Then `pnpm dev` and look at the home page at http://localhost:3000, the
+sign-in page at http://localhost:3000/sign-in, and the dashboard at
+http://localhost:3000/dashboard, signed in as the owner, on a computer's
+width and a phone's, in light and dark, against the checks in
 `workbench/designing.md`. Signing in works there with nothing set up: a
-dev server emails nothing, and shows the code on the page. When it's
+dev server emails nothing, and shows the code on the page.
+`pnpm database:seed` fills the dashboard with sample people and runs. When it's
 right, delete this file and `CLAUDE.md`'s first section, commit on a
 branch, and follow `workbench/commit-and-deploy.md` to put it on Railway:
 its "Setting up Railway" section is the one-time setup, which needs the

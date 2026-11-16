@@ -40,7 +40,7 @@ function Home() {
                 <p className="max-w-[58ch] text-pretty text-muted-foreground leading-relaxed">
                     When this page opened, it asked your API whether the
                     database was up. This is the line that question ran along,
-                    and the stops still being built.
+                    and every part it passes on the way.
                 </p>
                 {/* Beside the line on a wide screen, the next stops say this */}
                 <p className="mt-2 flex flex-wrap items-center gap-2 text-sm lg:hidden">

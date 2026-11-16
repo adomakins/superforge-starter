@@ -117,7 +117,7 @@ export function databaseStatus(found: Finding): Status {
     }
 }
 
-// Sign-in, Storage and workflows aren't checked live: the page says where
+// Sign-in, the dashboard, Storage and workflows aren't checked live: the page says where
 // they are instead, which differs between the dev server and a build
 
 export function signInStatus(): Status {
@@ -149,6 +149,14 @@ export function storageStatus(): Status {
             label: "Railway's bucket",
             detail: "Not checked live"
         }
+    }
+}
+
+export function dashboardStatus(): Status {
+    return {
+        tone: "fact",
+        label: "Behind sign-in",
+        detail: "Drawn in the browser, for whoever's signed in"
     }
 }
 

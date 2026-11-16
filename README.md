@@ -10,15 +10,16 @@ sets the colors, fonts, logo and copy, and writes `PRODUCT.md` and
 
 ## What's in it
 
-| Part     | What                                                                                  |
-| -------- | ------------------------------------------------------------------------------------- |
-| Website  | TanStack Start, React and Tailwind, pages prerendered, shadcn's components on Base UI |
-| API      | Hono under `/api`, called through a typed client and TanStack Query                   |
-| Database | Postgres with Drizzle, migrations checked by squawk and an upgrade test               |
-| Workflow | DBOS, for background work that picks up where it stopped, in the same Postgres        |
-| Sign-in  | A code or a link by email, sent by Superforge Infra; the users and sessions are yours |
-| Tests    | Vitest on a real Postgres, a database of each test's own                              |
-| Deploys  | Railway, as code (`.railway/railway.ts`), from each merge to `main` once CI passes    |
+| Part      | What                                                                                              |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| Website   | TanStack Start, React and Tailwind, pages prerendered, shadcn's components on Base UI             |
+| API       | Hono under `/api`, called through a typed client and TanStack Query                               |
+| Database  | Postgres with Drizzle, migrations checked by squawk and an upgrade test                           |
+| Workflow  | DBOS, for background work that picks up where it stopped, in the same Postgres                    |
+| Sign-in   | A code or a link by email, sent by Superforge Infra; the users and sessions are yours             |
+| Dashboard | Behind sign-in: your people and your workflows' runs, live, for your team; everyone's own account |
+| Tests     | Vitest on a real Postgres, a database of each test's own                                          |
+| Deploys   | Railway, as code (`.railway/railway.ts`), from each merge to `main` once CI passes                |
 
 ```
 source/
@@ -47,7 +48,9 @@ There's nothing to set up besides `pnpm install` (Node 22 and pnpm 10): no
 Docker and no credentials. `pnpm dev` and the tests run a Postgres of the
 checkout's own, from npm (`workbench/writing-code.md`, "Local
 development"), and signing in at `/sign-in` shows its code on the page
-rather than emailing it.
+rather than emailing it. After `pnpm database:seed`, sign in as
+`ada@example.com`, one of the sample team, to see the whole dashboard at
+`/dashboard`.
 
 Deploys run on Railway when a PR merges to `main`. Setting Railway up is a
 one-time job for each copy
