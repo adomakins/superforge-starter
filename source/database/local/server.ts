@@ -154,11 +154,7 @@ export async function migrateLocalDatabase() {
 
 // Who Postgres runs as: whoever this is, or a `postgres` user when this is
 // root, since Postgres refuses to run as root
-const owner = z.object({
-    uid: z.number().optional(),
-    gid: z.number().optional()
-})
-type Owner = z.infer<typeof owner>
+type Owner = { uid?: number; gid?: number }
 
 function serverOwner(): Owner {
     if (process.getuid?.() !== 0) {

@@ -1,5 +1,6 @@
 import { join } from "node:path"
-import { bucketStore } from "./bucket"
+import { z } from "zod"
+import { type BucketConfiguration, bucketStore } from "./bucket"
 import { Storage } from "./files"
 import { folderStore } from "./folder"
 
@@ -47,25 +48,43 @@ export function appStorage(): Storage {
         shared = new Storage(
             import.meta.env.DEV
                 ? folderStore(LOCAL_STORAGE_DIRECTORY)
-                : bucketStore(() => ({
-                      bucket: variable("STORAGE_BUCKET"),
-                      endpoint: variable("STORAGE_ENDPOINT"),
-                      region: variable("STORAGE_REGION"),
-                      access_key_id: variable("STORAGE_ACCESS_KEY_ID"),
-                      secret_access_key: variable("STORAGE_SECRET_ACCESS_KEY")
-                  }))
+                : bucketStore(() => bucketConfiguration())
         )
     }
     return shared
 }
 
-function variable(name: string): string {
-    const value = process.env[name]
-    if (value === undefined || value === "") {
+// The bucket's S3 credentials, as Railway sets them on the app's service
+// (.railway/railway.ts), by their variables' names
+const storage_environment = z.object({
+    STORAGE_BUCKET: z.string().min(1),
+    STORAGE_ENDPOINT: z.url(),
+    STORAGE_REGION: z.string().min(1),
+    STORAGE_ACCESS_KEY_ID: z.string().min(1),
+    STORAGE_SECRET_ACCESS_KEY: z.string().min(1)
+})
+
+/**
+ * The bucket's credentials, from the environment, parsed with its schema.
+ * Throws naming each of its variables that's missing or wrong.
+ */
+export function bucketConfiguration(
+    environment: Record<string, string | undefined> = process.env
+): BucketConfiguration {
+    const parsed = storage_environment.safeParse(environment)
+    if (!parsed.success) {
+        const names = parsed.error.issues.map((issue) => issue.path.join("."))
         throw new Error(
-            `${name} isn't set, so the Storage bucket can't be used`
+            `The Storage bucket can't be used, since these aren't set right: ${names.join(", ")}`
         )
     } else {
-        return value
+        const variables = parsed.data
+        return {
+            bucket: variables.STORAGE_BUCKET,
+            endpoint: variables.STORAGE_ENDPOINT,
+            region: variables.STORAGE_REGION,
+            access_key_id: variables.STORAGE_ACCESS_KEY_ID,
+            secret_access_key: variables.STORAGE_SECRET_ACCESS_KEY
+        }
     }
 }

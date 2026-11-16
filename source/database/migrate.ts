@@ -76,8 +76,7 @@ export async function migrateDatabase(url: string, folder = MIGRATIONS_FOLDER) {
  * `drizzle.__drizzle_migrations`: the hash of its SQL, and its time in the
  * journal.
  */
-export const migration = z.object({ hash: z.string(), when: z.number() })
-export type Migration = z.infer<typeof migration>
+export type Migration = { hash: string; when: number }
 
 // Whether Drizzle's table is there yet, and its rows. `created_at` is a
 // bigint, which pg hands over as text.

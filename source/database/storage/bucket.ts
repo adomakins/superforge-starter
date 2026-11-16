@@ -1,6 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises"
 import { AwsClient } from "aws4fetch"
-import { z } from "zod"
 import type { ObjectStore } from "."
 
 // Railway's bucket, through its S3 API: each request signed with the
@@ -11,14 +10,13 @@ import type { ObjectStore } from "."
 // Railway gives them, `auto`.
 
 /** A bucket's S3 credentials, as Railway names them. */
-export const bucket_configuration = z.object({
-    bucket: z.string(),
-    endpoint: z.string(),
-    region: z.string(),
-    access_key_id: z.string(),
-    secret_access_key: z.string()
-})
-export type BucketConfiguration = z.infer<typeof bucket_configuration>
+export type BucketConfiguration = {
+    bucket: string
+    endpoint: string
+    region: string
+    access_key_id: string
+    secret_access_key: string
+}
 
 // How long one request may take, and how many times one that failed for a
 // reason that may pass (a 5xx, a 429, no answer) is made in all
