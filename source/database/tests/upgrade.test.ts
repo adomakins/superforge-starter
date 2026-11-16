@@ -27,8 +27,9 @@ import { databaseUrl, onServer, quoted } from "./support/server"
 const base = process.env.UPGRADE_FROM
 const FOLDER = "source/database/migrations"
 
-// Two branches' migrations from empty, with rows between: a few seconds,
-// so it gets more than vitest's 5, which a busy machine can go past
+// Two branches' migrations from empty, ours and DBOS's, with rows between:
+// a few seconds, so it gets more than vitest's 5, which a busy machine can
+// go past
 describe.runIf(base !== undefined)(
     `upgrading from ${base}`,
     {

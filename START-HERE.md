@@ -76,7 +76,7 @@ should do next. Keep it one page for now; more pages are routes under
 title and description in `source/frontend/routes/__root.tsx`'s `head`.
 The health check's status line on the placeholder page is there to show
 the deploy works; drop it from the business's page, and keep
-`source/backend/health.ts`, which Railway's healthcheck needs.
+`source/backend/health/`, which Railway's healthcheck needs.
 
 ## 4. Write PRODUCT.md and DESIGN.md
 

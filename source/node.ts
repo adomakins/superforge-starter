@@ -14,10 +14,13 @@ import { Hono } from "hono"
 type ServerEntry = { fetch(request: Request): Promise<Response> }
 
 // A path, not a specifier, so tsc doesn't look for a build that typecheck
-// runs before
-const built: { default: ServerEntry } = await import(
-    new URL("../output/server/server.js", import.meta.url).href
-)
+// runs before. Beside Start's entry, the workflows' start and stop
+// (source/server.ts).
+const built: {
+    default: ServerEntry
+    startWorkflows(): Promise<void>
+    stopWorkflows(): Promise<void>
+} = await import(new URL("../output/server/server.js", import.meta.url).href)
 
 /**
  * What browsers and Railway's CDN may keep of the build's files
@@ -76,9 +79,27 @@ const server = serve(
     (address) => console.info("Server listening", { port: address.port })
 )
 
+// The workflows, once the server is answering: while a deploy goes out they
+// wait for the old deployment's gate, and the healthcheck has to answer
+// meanwhile for Railway to stop the old one (source/backend/workflows/)
+built.startWorkflows()
+
 // Railway stops the old deployment with SIGTERM once a new one is healthy:
-// finish the requests in flight, then exit
-process.on("SIGTERM", () => {
+// stop the workflows first, which lets the new one's start, then finish the
+// requests in flight, and exit. Once, however many signals come: pnpm
+// passes its own on, so a signal to both is two here, and a second stop
+// mustn't exit while the first is still shutting DBOS down.
+let stopping = false
+process.on("SIGTERM", async () => {
+    if (stopping) {
+        return
+    }
+    stopping = true
     console.info("Server stopping")
+    try {
+        await built.stopWorkflows()
+    } catch (error) {
+        console.error("The workflows didn't stop cleanly", { error })
+    }
     server.close(() => process.exit(0))
 })

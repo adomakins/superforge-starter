@@ -146,7 +146,8 @@ export function stopLocalServer() {
 /** Applies the branch's migrations to the app's database on it. */
 export async function migrateLocalDatabase() {
     await startLocalServer()
-    // Imported here, so `start` and `url` don't load Drizzle
+    // Imported here, so `start` and `url` don't load Drizzle, nor DBOS,
+    // which it migrates too, and which is slow to load
     const { migrateDatabase } = await import("../migrate.ts")
     return await migrateDatabase(localDatabaseUrl())
 }

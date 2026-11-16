@@ -23,6 +23,10 @@ const PARTS = [
         detail: "Postgres with Drizzle, every migration checked before it ships"
     },
     {
+        name: "Workflows",
+        detail: "DBOS, for background work that picks up where it stopped"
+    },
+    {
         name: "Deploys",
         detail: "Railway, from each merge to main, once CI has passed"
     },
@@ -64,7 +68,7 @@ function Home() {
                 {PARTS.map((part) => (
                     <li
                         key={part.name}
-                        className="flex flex-col gap-1 bg-background p-5 last:sm:col-span-2"
+                        className="flex flex-col gap-1 bg-background p-5"
                     >
                         <span className="font-medium text-sm">{part.name}</span>
                         <span className="text-muted-foreground text-sm">
@@ -78,15 +82,17 @@ function Home() {
 }
 
 // Whether the server and its database answer, asked from the browser, since
-// the page itself is prerendered and served before the server runs
+// the page itself is prerendered and served before the server runs. A
+// failure says what the API said went wrong, and a request that got no
+// answer at all says so.
 function Status() {
     const health = useQuery(healthQuery)
     const state = health.isPending
         ? { label: "Checking the server…", tone: "bg-muted-foreground" }
-        : health.data === true
+        : health.data?.ok === true
           ? { label: "Server and database are up", tone: "bg-success" }
           : {
-                label: "The server can't reach its database",
+                label: health.data?.error.message ?? "The server didn't answer",
                 tone: "bg-destructive"
             }
     return (

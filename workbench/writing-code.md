@@ -25,24 +25,42 @@ false` on its route) and left out of the prerender.
 
 ### Headless
 
-**Every database read and write goes through the API under `/api`.** It's
-a rule, not a preference: the website calls the API through its typed
-client (`source/backend/client.ts`) with the visitor's session, and
-scripts, other apps and LLMs call it over HTTP with an API token, once
-there is one. So:
+**Every database read and write goes through `backend/`'s operations, and
+routes under `/api` are how people and agents reach them.** It's a rule,
+not a preference. There are three ways into the data, and if each read and
+wrote it its own way, their checks would drift apart:
 
-- **Pages, route loaders and TanStack server functions never touch the
-  database**, and nothing in `frontend/` imports from `database/`. A page
-  that needs data asks the API, through TanStack Query.
+```text
+ Website (pages)          Scripts, agents            Workflows (DBOS)
+       │ the typed client       │ HTTP, with a token         │
+       └───────────────► routes under /api                   │
+                               ▼                             ▼
+             operations: plain functions, the only code that touches the database
+                               ▼
+                  Postgres: public · auth · internal · dbos
+```
+
+- **Only `backend/` touches the database, and inside it only
+  operations do**: plain functions that take the database and their
+  input and answer what happened, named for what they do
+  (`contacts/create.ts`, `contacts/find.ts`). A route checks what came in,
+  calls an operation, and answers; a workflow's step calls one. Neither
+  runs a query of its own.
+- **The website reaches data only over HTTP**, through the API's typed
+  client (`source/backend/client.ts`) with the visitor's session. Pages,
+  route loaders and TanStack server functions never touch the database,
+  and nothing in `frontend/` imports from `database/`. A page that needs
+  data asks the API, through TanStack Query.
 - **`database/` is imported only by `backend/`**, and by its own scripts
   and tests.
-- **A feature is a route before it's a screen.** Anything a person can do
-  on the site, a script or an agent can do through the same route, with
-  the same checks.
+- **A feature is a route before it's a screen.** Anything a person or an
+  agent can do is a route, with its checks, so a script or an agent can do
+  through the same route what a person does on the site. A workflow, which
+  runs inside the server, calls the operation behind it directly, not the
+  route over HTTP.
 
-One way to the data means one place for the checks (zod), the
-authorization and the tests, and one API for the site, scripts and agents
-alike.
+One layer of operations means one place for the checks, the authorization
+and the tests, whichever way in.
 
 ### Choosing where new code goes
 
@@ -53,17 +71,41 @@ matters:
   the router and styles. TanStack Start renders it on the server too (the
   prerender), so "frontend" means _the site_, not "runs only in the
   browser".
-- **`backend/`** — the Hono API under `/api` (`index.ts`), and the typed
-  client the frontend calls it with (`client.ts`). **`frontend/` imports
-  nothing from `backend/` except `client.ts` and types** (`import type`).
-  `client.ts` only takes the API's types, so no server code reaches the
-  browser bundle; importing anything else from `backend/` would ship it.
+- **`backend/`** — the Hono API under `/api`, a folder per feature, the
+  workflows, and the typed client the frontend calls the API with
+  (`client.ts`). **`frontend/` imports nothing from `backend/` except
+  `client.ts` and types** (`import type`). `client.ts` only takes the API's
+  types, so no server code reaches the browser bundle; importing anything
+  else from `backend/` would ship it.
+
+  ```text
+  backend/
+    index.ts        apiWith(): mounts each feature's routes, and puts the
+                    database, the bucket and the workflows on context.var
+    client.ts       the typed client the website calls the API with
+    context.ts      what every route sees on its context
+    failures.ts     the one failure shape: failure(), validated()
+    workflows/      DBOS, for background work (its README has the rules)
+    <feature>/      one folder per feature, like health/
+      routes.ts     Hono: check the input, call an operation, answer
+      check.ts      its operations, a file per verb (create.ts, find.ts)
+      workflows.ts  its workflows, if it has background work
+      tests/
+  ```
 - **`database/`** — the Postgres database: its Drizzle schema, `connect()`
   and `appDatabase()`, the migrations ([Data](#data)) and this checkout's
   own Postgres ([Local development](#local-development)). Server-only: used
   by `backend/`, never by `frontend/`.
-- **`utilities/`** — what both sides share, as it grows. Nothing
-  here may import from the other three.
+- **`utilities/`** — what both sides share. Nothing here may import from
+  the other three. It has two folders, and a file that fits neither sits
+  at the top, named for what it's about:
+  - **`primitives/`**, what knows nothing of the app, and could be copied
+    into another one unchanged: `durations.ts`'s `MINUTE` and `WEEK`.
+    Nothing here imports even from the rest of `utilities/`.
+  - **`schemas/`**, the zod schemas both sides check with, a file per
+    feature, so a form and the route it posts to check with the same one:
+    `failures.ts`, the shape every failure takes. A schema only one side
+    uses stays on that side.
 
 `source/server.ts` and `source/node.ts` sit above them all. TanStack's
 `router.tsx` and generated `routeTree.gen.ts` live in `frontend/`
@@ -73,30 +115,89 @@ matters:
   it from somewhere reachable from `/`: the prerenderer crawls links, and an
   unlinked page is not prerendered. A page that throws during the crawl
   fails `pnpm build`.
-- **A new API endpoint** → a route on the Hono app in `source/backend/`,
-  mounted in `index.ts`, and called from the browser through the typed
-  client in `source/backend/client.ts`, inside a TanStack Query
-  `queryOptions` or `mutationOptions` in `source/frontend/queries/`, like
-  `health.ts`. A group of routes is a Hono app of its own, in a file named
-  for what it's about (`backend/health.ts`), mounted in `index.ts`. Never a TanStack server function
-  ([Headless](#headless)): Hono routes are plain HTTP, so a webhook, a
-  script or an agent can reach them too.
-  Check what comes in with zod. A route reads the database from
-  `context.var.database`, never `appDatabase()` directly, so a test can hand it
-  its own.
+- **A new feature** → a folder in `source/backend/` named for it
+  (`contacts/`), with its routes in `routes.ts`, a Hono app of its own
+  mounted in `index.ts`, and its operations beside them, a file per verb
+  (`create.ts`, `find.ts`). `health/` is the smallest example. Never a
+  TanStack server function ([Headless](#headless)): Hono routes are plain
+  HTTP, so a webhook, a script or an agent can reach them too.
+- **A new API endpoint** → a route in its feature's `routes.ts`, which
+  checks what comes in with `validated(target, schema)`
+  (`backend/failures.ts`), calls an operation, and answers. It reads the
+  database from `context.var.database`, never `appDatabase()` directly, so
+  a test can hand it its own, and likewise `context.var.storage` and
+  `context.var.workflows`. The browser calls it through the typed client
+  in `source/backend/client.ts`, inside a TanStack Query `queryOptions` or
+  `mutationOptions` in `source/frontend/queries/`, a file per area of the
+  API, like `health.ts`.
+- **An operation** → a plain function in its feature's folder that takes
+  the database (a `Database`, so it runs inside a transaction too) and its
+  input, and answers an `OperationResult` when it can fail in a way its
+  caller handles. It's the only code that queries the database, so the
+  checks a write needs beyond its input's shape (that the row exists, that
+  the user may) live here, where every way in gets them.
+- **A call to an outside service** (an email provider, a payments API) →
+  one wrapper for that service, in a folder of its own under `backend/`
+  named for it, which every route and step calls; never a bare `fetch` in
+  a route. The wrapper owns its credential, its timeouts, its retries and
+  its pacing, logs each call's outcome, and answers an `OperationResult`
+  for the failures its callers handle. A test hands its callers a fake of
+  it.
 - **A table or a column** → `source/database/schema.ts`, with a migration
   from `pnpm database:generate` ([Migrations](#migrations)).
-- **A new React component** → `source/frontend/components/`, and a shadcn
-  primitive in `components/primitives/` with `pnpm dlx shadcn@4 add
-  <name>` (`components.json` says where).
-- **Something that runs in the background or on a schedule** → this
-  service first, as routes under `/api` and code beside them. A second
-  service in the Railway project (`.railway/railway.ts`), started from this
-  same package with its own start command, or a cron service with a
-  `cronSchedule`, only when something must deploy or scale on its own. Not
-  a second package: one database means one package.
+- **A new React component** → a folder of `source/frontend/components/`
+  by what it's for: `primitives/` for shadcn's (`pnpm dlx shadcn@4 add
+  <name>`, which `components.json` sends there), `states/` for what a
+  screen shows while it's empty, loading or lost (`not-found.tsx`),
+  `site/` for the public pages' and `dashboard/` for the screens behind
+  sign-in, each made when its first component arrives.
+- **A screen behind sign-in** → a route under
+  `source/frontend/routes/dashboard/`, drawn in the browser (`ssr: false`)
+  and left out of the prerender, since it changes per visitor. Public pages
+  stay prerendered.
+- **Something that runs in the background** → a workflow, in its
+  feature's `workflows.ts`, listed in `backend/workflows/index.ts`, and
+  started from a route through `context.var.workflows`
+  (`source/backend/workflows/README.md` has the rules every step follows).
+  Something short that's just due at a time is a timestamp in Postgres
+  that a runner checks, not a workflow. A second service in the Railway
+  project (`.railway/railway.ts`), started from this same package with its
+  own start command, or a cron service with a `cronSchedule`, only when
+  something must deploy or scale on its own. Not a second package: one
+  database means one package.
 - **Content** lives where it's published: a page's copy in its route, and
   copy more than one page shares in `source/utilities/`.
+
+### How a route fails
+
+**Every route fails in one shape**, so the site, scripts and agents read a
+failure the same way, whatever route it came from
+(`source/utilities/schemas/failures.ts`):
+
+```json
+{ "error": { "reason": "not-found", "message": "No such contact" } }
+```
+
+`reason` is for a program to branch on, a kebab-case word or two that
+never changes once a route answers with it, and `message` is for a person.
+The status says what kind of failure it is: 400 for input that doesn't
+fit, 401 for nobody signed in, 403 for someone who may not, 404 for what
+isn't there, 409 for a conflict, 503 for a dependency that's down.
+
+- **An expected failure** is answered with
+  `failure(context, status, reason, message)` (`backend/failures.ts`),
+  usually from the `OperationResult` an operation answered:
+  `failure(context, 404, found.error, "No such contact")`. The typed client
+  knows each reason a route can answer.
+- **Input that doesn't fit** is answered by `validated()` itself: 400,
+  `invalid`, and `issues`, what didn't fit, field by field.
+- **A path no route answers** is 404 `not-found`, and **a route that
+  throws** is 500 `unexpected`, logged (`index.ts` mounts both handlers).
+  Throwing is for bugs, never for a failure a caller handles.
+- **A page reads a failure** with `readFailure(response)`
+  (`frontend/queries/failures.ts`), inside its query, as `health.ts` does,
+  which answers `unavailable` for an answer not in this shape, like
+  Railway's own page while the server is down.
 
 ## Data
 
@@ -106,6 +207,7 @@ There's **one database, Postgres**, on Railway, queried with Drizzle
 |                       | Postgres                                                                    |
 | --------------------- | --------------------------------------------------------------------------- |
 | Holds                 | no tables yet: `schema.ts` has the first one's shape in its header          |
+| And                   | DBOS's, the workflows' runs and steps, in `dbos` (`backend/workflows/`)     |
 | Schema                | `source/database/schema.ts`                                                 |
 | New migration         | `pnpm database:generate`, into `source/database/migrations/`                |
 | Applied in production | `pnpm database:migrate`, Railway's pre-deploy command, before each deploy   |
@@ -120,8 +222,9 @@ what it hangs off, snake_case columns, uuids for our own rows, every
 timestamp a `timestamptz` to the millisecond (`columns.ts`), compared
 against `now` and `fromNow` from `time.ts`.
 
-- **In a Hono route, use `context.var.database`.** `source/backend/index.ts` puts
-  it there for every request: `appDatabase()`, the server's one pool,
+- **A route hands its operations `context.var.database`**, and a
+  workflow's step its `context.database`. `source/backend/index.ts` puts it
+  there for every request: `appDatabase()`, the server's one pool,
   connected to `DATABASE_URL` (Railway sets it), or to the checkout's own
   database in a dev server, whatever `DATABASE_URL` says. A script makes its
   own with `connect(url)` and ends it with `.$client.end()`.
@@ -134,8 +237,9 @@ against `now` and `fromNow` from `time.ts`.
   index a foreign key's column by itself, and a cascade from a parent then
   scans the child's table.
 - **The server keeps 10 connections** (`connect()`'s pool), of the 500
-  Railway's Postgres allows. A query that holds one for long, or a loop
-  that opens many, starves every request behind it.
+  Railway's Postgres allows, and its workflows up to 13 more
+  (`backend/workflows/engine.ts`). A query that holds one for long, or a
+  loop that opens many, starves every request behind it.
 - **Files go in the Storage bucket, not the database**, one kind of file
   to a folder, and only through that kind. Each kind is a getter on the
   `Storage` class (`source/database/storage/files.ts`, whose header has the
@@ -144,8 +248,9 @@ against `now` and `fromNow` from `time.ts`.
   }`), where a key's file goes (`<customer id>/<invoice id>.pdf`), and
   what's in it: `json(schema)`, checked with zod as it's kept and as it's
   read back, `text(content_type)` or `bytes(content_type)`
-  (`storage/kind.ts`). A route then calls
-  `context.var.storage.invoices.put(key, body)`, `.get(key)` (null when
+  (`storage/kind.ts`). An operation then calls
+  `storage.invoices.put(key, body)`, with the `context.var.storage` its
+  route or step handed it, `.get(key)` (null when
   there's no file) or `.delete(key)`, and never writes a path: a key that doesn't fit its kind, or a path with an
   empty, `.` or `..` part, throws before anything is kept. The key's first
   part is what the file hangs off, so all of one customer's files are one
@@ -266,11 +371,17 @@ statement.
   new one from empty.
 - **`pnpm database:seed`** puts sample rows in it, to try things out on
   (`source/database/seed/seed.ts`, run by `workbench/scripts/seed.mjs`
-  through Vite's module runner, so it can use the `@/` paths). Each table
-  that wants sample rows gets a seeder there, written out by hand, which
-  replaces its rows, so seeding again is safe. Its test seeds an empty
-  database, so a schema change that breaks it fails `pnpm check`. There
-  are none until the first table.
+  through Vite's module runner, so it can use the `@/` paths). **Every
+  table gets a seeder there, in the same change that adds the table**,
+  written out by hand, which replaces its rows, so seeding again is safe,
+  and covers every state a screen shows. A table whose rows nothing should
+  make up, like sign-in's codes, goes in `UNSEEDED` instead, with why. The
+  seeded rows are what each branch's migrations first run over, in every
+  checkout's database as `pnpm dev` starts, so an unseeded table is one a
+  migration is never tried on before CI. Its test seeds an empty database,
+  and fails on a table that's in neither, so a schema change that breaks
+  the seed, or a table without one, fails `pnpm check`. There are none
+  until the first table.
 - **Production's** is in Railway's dashboard: the Postgres service's Data
   tab. It's only on Railway's private network, so a script that writes to
   it runs on the app's service, with `railway ssh --service app --
@@ -377,10 +488,14 @@ Postgres, in a database of each test's own: `await testDatabase()`
 (`source/database/tests/support/database.ts`) copies a template that every
 migration was applied to once that run (`setup.ts`, vitest's global setup),
 and drops the copy when the test finishes. So a route is tried on real rows
-through a Hono app of the test's own, with `testClient()` or
-`app.request()`, as `source/backend/tests/health.test.ts` does. The
-server is the checkout's own, here and in CI, which the setup starts when
-it isn't running.
+through the whole API, with `testApi()` (`source/backend/tests/support/api.ts`):
+the API as the server mounts it, on a database of the test's own, the
+bucket's bytes in memory, and the workflows recorded rather than run, in
+`started`, called through the typed client, as
+`source/backend/health/tests/routes.test.ts` does. A workflow that needs
+DBOS itself is tested as `source/backend/workflows/tests/engine.test.ts`
+is. The server is the checkout's own, here and in CI, which the setup
+starts when it isn't running.
 
 ## What biome enforces — don't hand-manage style
 

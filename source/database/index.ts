@@ -5,8 +5,9 @@ import { localDatabaseUrl } from "./local"
 import * as schema from "./schema"
 
 // Connections the server keeps open, of the 500 Railway's Postgres allows
-// (`max_connections`, read on 2026-10-25). The two
-// processes that run while a deploy goes out hold 20 at most, which leaves
+// (`max_connections`, read on 2026-10-25). With DBOS's own
+// (backend/workflows/engine.ts, which has the sum), one process holds at
+// most 23, and the two that run while a deploy goes out 46, which leaves
 // room for the migrations and psql.
 const POOL_SIZE = 10
 

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { DBOS } from "@dbos-inc/dbos-sdk"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { migrate } from "drizzle-orm/node-postgres/migrator"
 import pg from "pg"
@@ -14,6 +15,13 @@ import { z } from "zod"
  * serves. Drizzle applies every pending migration in one transaction, so
  * one that fails rolls them all back, this exits non-zero, and Railway
  * stops the deploy with the current version still serving.
+ *
+ * Then DBOS's own tables, in the `dbos` schema, with DBOS's own migrations
+ * (`DBOS.migrate`), which DBOS would otherwise run only as it launches
+ * (backend/workflows/engine.ts). Run here, they're there before any process
+ * starts, so a process still waiting to launch can put a workflow on its
+ * queue, and a DBOS upgrade's migrations run before the deploy, while the
+ * version before still serves, like ours.
  *
  * Node runs this file from source, stripping its types, so it imports
  * only packages: no `@/` paths.
@@ -37,7 +45,8 @@ export const STATEMENT_TIMEOUT_SECONDS = 240
 export const MIGRATION_SETTINGS = `-c lock_timeout=${LOCK_TIMEOUT_SECONDS}s -c statement_timeout=${STATEMENT_TIMEOUT_SECONDS}s`
 
 /**
- * Applies what's pending to the database at `url`, and says how many.
+ * Applies what's pending to the database at `url`, ours then DBOS's, and
+ * says how many of ours.
  */
 export async function migrateDatabase(url: string, folder = MIGRATIONS_FOLDER) {
     const client = new pg.Client({
@@ -45,16 +54,21 @@ export async function migrateDatabase(url: string, folder = MIGRATIONS_FOLDER) {
         options: MIGRATION_SETTINGS
     })
     await client.connect()
-    try {
-        const before = (await recordedMigrations(client)).length
-        await migrate(drizzle(client), {
-            migrationsFolder: folder
-        })
-        const after = (await recordedMigrations(client)).length
-        return { applied: after - before, total: after }
-    } finally {
-        await client.end()
-    }
+    const migrated = await (async () => {
+        try {
+            const before = (await recordedMigrations(client)).length
+            await migrate(drizzle(client), {
+                migrationsFolder: folder
+            })
+            const after = (await recordedMigrations(client)).length
+            return { applied: after - before, total: after }
+        } finally {
+            await client.end()
+        }
+    })()
+    // The schema backend/workflows/engine.ts names
+    await DBOS.migrate(url, { schemaName: "dbos" })
+    return migrated
 }
 
 /**
