@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query"
-import { z } from "zod"
 import { healthQuery } from "@/frontend/queries/health"
 
 /**
@@ -7,13 +6,11 @@ import { healthQuery } from "@/frontend/queries/health"
  * all up, the API up but its database not, or the API itself not
  * answering (no answer at all, or one that isn't the API's own).
  */
-export const finding = z.discriminatedUnion("state", [
-    z.object({ state: z.literal("checking") }),
-    z.object({ state: z.literal("up"), milliseconds: z.number() }),
-    z.object({ state: z.literal("database-down"), milliseconds: z.number() }),
-    z.object({ state: z.literal("api-down") })
-])
-export type Finding = z.infer<typeof finding>
+export type Finding =
+    | { state: "checking" }
+    | { state: "up"; milliseconds: number }
+    | { state: "database-down"; milliseconds: number }
+    | { state: "api-down" }
 
 /**
  * The health check, asked from the browser once the page is up, since the

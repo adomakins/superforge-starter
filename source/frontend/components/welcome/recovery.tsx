@@ -1,5 +1,4 @@
 import { cn } from "cn"
-import { z } from "zod"
 import { IN_DEVELOPMENT } from "./environment"
 import type { Finding } from "./finding"
 import { PromptChip } from "./prompt-chip"
@@ -9,13 +8,12 @@ import { PromptChip } from "./prompt-chip"
  * can say it under that part, what went wrong, the sentence to tell Claude,
  * and what else would fix it. A dev server and a build differ.
  */
-export const recovery = z.object({
-    part: z.enum(["api", "database"]),
-    problem: z.string(),
-    prompt: z.string(),
-    otherwise: z.string()
-})
-export type Recovery = z.infer<typeof recovery>
+export type Recovery = {
+    part: "api" | "database"
+    problem: string
+    prompt: string
+    otherwise: string
+}
 
 export function recoveryFor(found: Finding): Recovery | null {
     switch (found.state) {

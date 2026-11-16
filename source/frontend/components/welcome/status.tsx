@@ -6,7 +6,6 @@ import {
     CircleHelp,
     LoaderCircle
 } from "lucide-react"
-import { z } from "zod"
 import { IN_DEVELOPMENT } from "./environment"
 import type { Finding } from "./finding"
 
@@ -14,16 +13,14 @@ import type { Finding } from "./finding"
  * How sure the page is about a part: seen working, being checked, broken,
  * unknown because something before it broke, or a fact it didn't check.
  */
-export const tone = z.enum(["ok", "checking", "problem", "unknown", "fact"])
-export type Tone = z.infer<typeof tone>
+export type Tone = "ok" | "checking" | "problem" | "unknown" | "fact"
 
 /** What the page says about a part: a tone, a line, and a quieter second one. */
-export const status = z.object({
-    tone,
-    label: z.string(),
-    detail: z.string().optional()
-})
-export type Status = z.infer<typeof status>
+export type Status = {
+    tone: Tone
+    label: string
+    detail?: string
+}
 
 const ICONS = {
     ok: CircleCheck,

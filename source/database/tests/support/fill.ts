@@ -25,25 +25,22 @@ const ROWS = 3
 // but not DBOS's, which DBOS migrates itself
 export const SCHEMAS = ["public", "auth", "internal"]
 
-const table_column = z.object({
-    name: z.string(),
-    type: z.string(),
-    nullable: z.boolean(),
-    defaulted: z.boolean(),
+type Column = {
+    name: string
+    type: string
+    nullable: boolean
+    defaulted: boolean
     // Part of the primary key or a unique constraint
-    unique: z.boolean(),
-    references: z
-        .object({
-            table: z.string(),
-            column: z.string(),
-            // Whether a column of its foreign key is in a key, so a row's
-            // parent is the parent's row of the same number, the same for
-            // every column of the key
-            keyed: z.boolean()
-        })
-        .nullable()
-})
-type Column = z.infer<typeof table_column>
+    unique: boolean
+    references: {
+        table: string
+        column: string
+        // Whether a column of its foreign key is in a key, so a row's
+        // parent is the parent's row of the same number, the same for every
+        // column of the key
+        keyed: boolean
+    } | null
+}
 
 // The catalog's rows, as tablesInOrder() reads them: each column, and each
 // column of a key, with what a foreign key points at

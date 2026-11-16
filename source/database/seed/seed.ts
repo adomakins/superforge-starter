@@ -1,4 +1,3 @@
-import { z } from "zod"
 import { connect, type Database } from "@/database"
 import { localDatabaseUrl } from "@/database/local"
 
@@ -30,10 +29,9 @@ import { localDatabaseUrl } from "@/database/local"
  * person's dev server.
  */
 
-/** What a seeder wrote: how many rows, in which table. */
-export const seeded = z.object({ table: z.string(), rows: z.number() })
-
-export type Seeder = (transaction: Database) => Promise<z.infer<typeof seeded>>
+export type Seeder = (
+    transaction: Database
+) => Promise<{ table: string; rows: number }>
 
 // In the order they run: a table after the ones its rows point at
 const SEEDERS: Seeder[] = []

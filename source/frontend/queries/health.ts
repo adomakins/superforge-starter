@@ -1,20 +1,16 @@
 import { queryOptions } from "@tanstack/react-query"
-import { z } from "zod"
 import { client } from "@/backend/client"
-import { operationResult } from "@/utilities/primitives/result"
-import { failure_details } from "@/utilities/schemas/failures"
+import type { ApiFailure } from "@/utilities/schemas/failures"
 import { readFailure } from "./failures"
 
-/** What the health check answers the page: up, or the failure the API sent. */
-export const health_status = operationResult(z.null(), failure_details)
-export type HealthStatus = z.infer<typeof health_status>
-
-/** A health check's answer, and the round trip it took, as the browser timed it. */
-export const health_check = z.object({
-    status: health_status,
-    milliseconds: z.number().int().nonnegative()
-})
-export type HealthCheck = z.infer<typeof health_check>
+/**
+ * A health check's answer, up or the failure the API sent, and the round
+ * trip it took, as the browser timed it.
+ */
+export type HealthCheck = {
+    status: OperationResult<null, ApiFailure>
+    milliseconds: number
+}
 
 /**
  * Whether the server and its database are up (`GET /api/health`), through
