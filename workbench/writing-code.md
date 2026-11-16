@@ -612,7 +612,13 @@ a value is parsed with a zod schema where it comes in:
 - **Rows from raw SQL** (`client.query()`, `database.execute()`), which come
   back untyped: parsed, never typed with a generic like
   `client.query<{ taken: boolean }>()`. Rows from Drizzle's query builder
-  are typed by their tables already.
+  are typed by their tables already. **A raw expression in a Drizzle
+  select, `sql<T>`, states a type nothing checks**, so its SQL pins that
+  type: a comparison is a boolean already, and anything else is cast to the
+  type it claims (`::integer`, `::text`). `count()` and `sum()` answer
+  `bigint` and `numeric`, and `round()` and `extract()` `numeric`, which pg
+  hands over as strings: a `sql<number>` over one without `::integer` is a
+  string at runtime.
 - **Outside services**: their responses and the webhooks they send, parsed
   inside the service's wrapper, so its callers get typed values.
 - **Anything stored and read back by a later version of the code**: a
