@@ -55,6 +55,11 @@ update from.
   came from, and its version), this changelog, and
   `workbench/updating.md`, how a copy takes a later release.
 - **The license**: MIT (`LICENSE`).
+- **Design guidance without a plugin**: the template no longer enables
+  the impeccable plugin in `.claude/settings.json`, which every owner had
+  to trust and which asked START-HERE's questions again.
+  `workbench/designing.md` carries the design rules instead, for any
+  agent, and says how to install impeccable for a full redesign.
 - **CI in a new copy**: `railway-apply` skips with a notice until the
   repository has its `RAILWAY_TOKEN` secret, so a copy's first commits
   don't fail before Railway is set up.
