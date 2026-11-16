@@ -61,3 +61,52 @@ test("the API answers a path no route answers 404, uncached", async () => {
     const { error } = api_failure.parse(await response.json())
     expect(error.reason).toBe("not-found")
 })
+
+test("a body that isn't JSON is answered 400 invalid, not as a bug", async () => {
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+    const response = await app.request("/api/things", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not json"
+    })
+    expect(response.status).toBe(400)
+    expect(api_failure.parse(await response.json()).error.reason).toBe(
+        "invalid"
+    )
+    expect(warned).toHaveBeenCalled()
+    expect(logged).not.toHaveBeenCalled()
+})
+
+test("the API refuses another site's form, and takes this site's", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {})
+    const { api } = await testApi()
+    const form = {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" }
+    }
+
+    const cross_site = await api.request("http://app.test/api/auth/sign-out", {
+        ...form,
+        headers: { ...form.headers, Origin: "https://elsewhere.test" }
+    })
+    expect(cross_site.status).toBe(403)
+    expect(api_failure.parse(await cross_site.json()).error.reason).toBe(
+        "forbidden"
+    )
+
+    // Behind Railway's proxy the request says http and the browser https:
+    // the host is what counts
+    const same_site = await api.request("http://app.test/api/auth/sign-out", {
+        ...form,
+        headers: { ...form.headers, Origin: "https://app.test" }
+    })
+    expect(same_site.status).toBe(200)
+
+    // A browser that says the request came from this site
+    const same_origin = await api.request("http://app.test/api/auth/sign-out", {
+        ...form,
+        headers: { ...form.headers, "Sec-Fetch-Site": "same-origin" }
+    })
+    expect(same_origin.status).toBe(200)
+})

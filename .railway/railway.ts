@@ -3,6 +3,7 @@ import {
     defineRailway,
     github,
     postgres,
+    preserve,
     project,
     ref,
     service
@@ -118,7 +119,13 @@ export default defineRailway(() => {
             STORAGE_ENDPOINT: ref(storage, "ENDPOINT"),
             STORAGE_REGION: ref(storage, "REGION"),
             STORAGE_ACCESS_KEY_ID: ref(storage, "ACCESS_KEY_ID"),
-            STORAGE_SECRET_ACCESS_KEY: ref(storage, "SECRET_ACCESS_KEY")
+            STORAGE_SECRET_ACCESS_KEY: ref(storage, "SECRET_ACCESS_KEY"),
+            // The secret key of this app's project on Superforge Infra
+            // (sf_secret_…), which sign-in calls Infra with
+            // (source/backend/infra/). The owner makes it on Superforge's
+            // dashboard and sets it here in Railway's dashboard, which
+            // `preserve()` keeps; until then, sign-in answers that it's down
+            INFRA_SECRET_KEY: preserve()
         }
     })
     // Railway's own address for the app, which the first apply makes with

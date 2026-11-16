@@ -1,5 +1,6 @@
 import { connect, type Database } from "@/database"
 import { localDatabaseUrl } from "@/database/local"
+import { seedSessions, seedUsers } from "./users"
 
 /**
  * Sample rows for this checkout's database, so a dev server has something
@@ -19,8 +20,8 @@ import { localDatabaseUrl } from "@/database/local"
  *
  * Keep it small and written out by hand, so it works with no credential,
  * offline and in CI, and covers every state a screen shows at least once.
- * A table whose rows nothing should make up, like sign-in's codes, which a
- * sign-in makes, is in UNSEEDED instead, with why. The rows are what each
+ * A table whose rows nothing should make up, like a log a job writes, is in
+ * UNSEEDED instead, with why. The rows are what each
  * branch's migrations first run over, in every checkout's database as
  * `pnpm dev` starts, so a table left empty is one a migration is never
  * tried on before it ships. Its test seeds an empty database, and fails a
@@ -34,12 +35,12 @@ export type Seeder = (
 ) => Promise<{ table: string; rows: number }>
 
 // In the order they run: a table after the ones its rows point at
-const SEEDERS: Seeder[] = []
+const SEEDERS: Seeder[] = [seedUsers, seedSessions]
 
 /**
  * The tables that get no sample rows, each with why, by its name as a
  * seeder names it: bare in `public`, after its schema in another, like
- * `auth.sign_in_codes`.
+ * `internal.error_log`.
  */
 export const UNSEEDED: Record<string, string> = {}
 

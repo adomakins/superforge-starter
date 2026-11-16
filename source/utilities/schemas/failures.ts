@@ -11,7 +11,11 @@ export const failure_details = z.object({
     // For "invalid": what in the request didn't fit, field by field
     issues: z
         .array(z.object({ path: z.string(), message: z.string() }))
-        .optional()
+        .optional(),
+    // For a failure that passes with time, like a 429: about how many
+    // seconds until asking again can work, which its Retry-After header says
+    // too
+    retry_after: z.number().optional()
 })
 export type ApiFailure = z.infer<typeof failure_details>
 

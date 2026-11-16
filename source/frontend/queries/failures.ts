@@ -27,3 +27,29 @@ export async function readFailure(
     }
     return { reason: "unavailable", message: "The server didn't answer" }
 }
+
+/**
+ * What a mutation throws when the API answers a failure, so the page can
+ * say what went wrong by its `reason`: TanStack Query hands a mutation's
+ * error to the page rather than its answer. A request that got no answer
+ * at all throws as `fetch` does, which a page reads as `unavailable`
+ * (`failureOf`).
+ */
+export class FailedRequest extends Error {
+    failure: ApiFailure
+
+    constructor(failure: ApiFailure) {
+        super(failure.message)
+        this.name = "FailedRequest"
+        this.failure = failure
+    }
+}
+
+/** What made a mutation fail: the API's failure, or `unavailable`. */
+export function failureOf(error: Error): ApiFailure {
+    if (error instanceof FailedRequest) {
+        return error.failure
+    } else {
+        return { reason: "unavailable", message: error.message }
+    }
+}

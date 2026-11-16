@@ -31,6 +31,10 @@ has made too. The template's own diff is only what changed upstream, and
   that's out of order, so the template's would land among this codebase's
   own and never run. The release's change comes across in `schema.ts`
   instead, and this codebase generates its own migration from it (step 4).
+- **`source/frontend/routeTree.gen.ts`**: TanStack Router writes it from
+  the routes, so a copy that has pages of its own would only conflict on
+  it. `pnpm build` writes it again, with the release's routes and the
+  copy's (step 4).
 - **What only the template has**: `START-HERE.md`, and the "This template"
   section of `README.md`, which a copy removes as it becomes the
   business's own.
@@ -91,6 +95,7 @@ to the latest (here, `v0.1.0` to `v0.2.0`):
 git diff --binary --no-color template/tags/v0.1.0 template/tags/v0.2.0 -- . \
     ':(exclude)pnpm-lock.yaml' \
     ':(exclude)source/database/migrations' \
+    ':(exclude)source/frontend/routeTree.gen.ts' \
     ':(exclude)START-HERE.md' |
     git apply --3way
 ```
@@ -120,7 +125,9 @@ it's resolving beside it. What `git apply` says:
 
 Then, before the next release:
 
-1. `pnpm install`, which brings `pnpm-lock.yaml` up to date.
+1. `pnpm install`, which brings `pnpm-lock.yaml` up to date, then
+   `pnpm build`, which writes `source/frontend/routeTree.gen.ts` again
+   from the routes, the release's new ones among them.
 2. If the release flags **Schema**, generate this codebase's migration
    for it, named for what it changed, then add any SQL the notes give
    (or put it in a migration of its own, made with `--custom`). Read the

@@ -13,10 +13,13 @@
 //      path that isn't a page answers 404
 //   5. its workflows launched: DBOS registers the app's queues in its own
 //      tables once it has (source/backend/workflows/engine.ts)
+//   6. with no INFRA_SECRET_KEY, sign-in answers 503, never the stand-in a
+//      dev server signs in with (source/backend/infra/choose.ts)
 //
 // So a start script that crashes, a migration that won't apply from empty,
-// a page the server can't find, a broken cache header or workflows that
-// never start fails here, not in the deploy. It drops its database
+// a page the server can't find, a broken cache header, workflows that
+// never start or a build that would show sign-in codes on the page fails
+// here, not in the deploy. It drops its database
 // whatever happens.
 import { execFileSync, spawn } from "node:child_process"
 import { readdirSync } from "node:fs"
@@ -59,7 +62,9 @@ try {
         env: {
             ...process.env,
             DATABASE_URL: database_url.href,
-            PORT: String(port)
+            PORT: String(port),
+            // None, whatever the shell has, for step 6
+            INFRA_SECRET_KEY: ""
         },
         stdio: ["ignore", "inherit", "inherit"],
         detached: true
@@ -86,6 +91,11 @@ try {
 
     // 5. The workflows, which launch once the server is listening
     await waitForWorkflows()
+
+    // 6. Sign-in, which a build without INFRA_SECRET_KEY refuses, rather
+    //    than falling back to the dev server's stand-in, which shows the
+    //    code on the page (source/backend/infra/choose.ts)
+    await expectSignInDown(base)
 } catch (error) {
     problems.push(error instanceof Error ? error.message : String(error))
 } finally {
@@ -183,6 +193,24 @@ async function waitForWorkflows() {
         await sleep(250)
     }
     throw new Error("The workflows didn't launch within 30 seconds")
+}
+
+// A sign-in started on a build with no secret key: refused as unavailable,
+// with no code in the answer
+async function expectSignInDown(base) {
+    const response = await fetch(`${base}/api/auth/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "smoke-test@example.com" })
+    })
+    const body = await response.json().catch(() => null)
+    if (response.status !== 503 || body?.error?.reason !== "unavailable") {
+        problems.push(
+            `POST /api/auth/start without INFRA_SECRET_KEY answered ${response.status} ${JSON.stringify(body)}, not 503 unavailable`
+        )
+    } else {
+        console.info("  ✓ POST /api/auth/start 503, with no secret key")
+    }
 }
 
 async function expectAnswer(base, path, status, cache_control) {

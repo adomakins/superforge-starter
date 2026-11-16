@@ -16,6 +16,7 @@ sets the colors, fonts, logo and copy, and writes `PRODUCT.md` and
 | API      | Hono under `/api`, called through a typed client and TanStack Query                   |
 | Database | Postgres with Drizzle, migrations checked by squawk and an upgrade test               |
 | Workflow | DBOS, for background work that picks up where it stopped, in the same Postgres        |
+| Sign-in  | A code or a link by email, sent by Superforge Infra; the users and sessions are yours |
 | Tests    | Vitest on a real Postgres, a database of each test's own                              |
 | Deploys  | Railway, as code (`.railway/railway.ts`), from each merge to `main` once CI passes    |
 
@@ -45,7 +46,8 @@ pnpm check          # everything CI runs: biome, the migrations, typecheck, the 
 There's nothing to set up besides `pnpm install` (Node 22 and pnpm 10): no
 Docker and no credentials. `pnpm dev` and the tests run a Postgres of the
 checkout's own, from npm (`workbench/writing-code.md`, "Local
-development").
+development"), and signing in at `/sign-in` shows its code on the page
+rather than emailing it.
 
 Deploys run on Railway when a PR merges to `main`. Setting Railway up is a
 one-time job for each copy
