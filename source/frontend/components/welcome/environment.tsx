@@ -12,9 +12,9 @@ function subscribeToNothing() {
 }
 
 /**
- * The address the page was opened at, like `localhost:3000`, once it's in the
- * browser. The prerender has no address, so it's null there and on the first
- * render after it, and the page fills it in without a mismatch.
+ * The address the page was opened at, like `localhost:3000`, once it's in
+ * the browser. The prerender has no address, so it's null there and on the
+ * first render after it, and the page fills it in without a mismatch.
  */
 export function useAddress(): string | null {
     return useSyncExternalStore(
@@ -43,16 +43,5 @@ export function EnvironmentChip({ className }: { className?: string }) {
                 </span>
             )}
         </p>
-    )
-}
-
-/** The placeholder mark and name, which START-HERE.md replaces. */
-export function BusinessMark() {
-    return (
-        <span className="flex items-center gap-2.5">
-            {/* The favicon, which follows the device's theme itself */}
-            <img src="/favicon.svg" alt="" className="size-5" />
-            <span className="font-medium text-sm">Your business</span>
-        </span>
     )
 }
