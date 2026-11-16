@@ -10,11 +10,21 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MockupsRouteRouteImport } from './routes/mockups/route'
 import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as MockupsIndexRouteImport } from './routes/mockups/index'
+import { Route as MockupsInspectorRouteImport } from './routes/mockups/inspector'
+import { Route as MockupsRailRouteImport } from './routes/mockups/rail'
+import { Route as MockupsTimelineRouteImport } from './routes/mockups/timeline'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MockupsRouteRoute = MockupsRouteRouteImport.update({
+  id: '/mockups',
+  path: '/mockups',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignInRoute = SignInRouteImport.update({
@@ -22,30 +32,86 @@ const SignInRoute = SignInRouteImport.update({
   path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MockupsIndexRoute = MockupsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MockupsRouteRoute,
+} as any)
+const MockupsInspectorRoute = MockupsInspectorRouteImport.update({
+  id: '/inspector',
+  path: '/inspector',
+  getParentRoute: () => MockupsRouteRoute,
+} as any)
+const MockupsRailRoute = MockupsRailRouteImport.update({
+  id: '/rail',
+  path: '/rail',
+  getParentRoute: () => MockupsRouteRoute,
+} as any)
+const MockupsTimelineRoute = MockupsTimelineRouteImport.update({
+  id: '/timeline',
+  path: '/timeline',
+  getParentRoute: () => MockupsRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/mockups': typeof MockupsRouteRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/mockups/inspector': typeof MockupsInspectorRoute
+  '/mockups/rail': typeof MockupsRailRoute
+  '/mockups/timeline': typeof MockupsTimelineRoute
+  '/mockups/': typeof MockupsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/sign-in': typeof SignInRoute
+  '/mockups/inspector': typeof MockupsInspectorRoute
+  '/mockups/rail': typeof MockupsRailRoute
+  '/mockups/timeline': typeof MockupsTimelineRoute
+  '/mockups': typeof MockupsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/mockups': typeof MockupsRouteRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/mockups/inspector': typeof MockupsInspectorRoute
+  '/mockups/rail': typeof MockupsRailRoute
+  '/mockups/timeline': typeof MockupsTimelineRoute
+  '/mockups/': typeof MockupsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/sign-in'
+  fullPaths:
+    | '/'
+    | '/mockups'
+    | '/sign-in'
+    | '/mockups/inspector'
+    | '/mockups/rail'
+    | '/mockups/timeline'
+    | '/mockups/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/sign-in'
-  id: '__root__' | '/' | '/sign-in'
+  to:
+    | '/'
+    | '/sign-in'
+    | '/mockups/inspector'
+    | '/mockups/rail'
+    | '/mockups/timeline'
+    | '/mockups'
+  id:
+    | '__root__'
+    | '/'
+    | '/mockups'
+    | '/sign-in'
+    | '/mockups/inspector'
+    | '/mockups/rail'
+    | '/mockups/timeline'
+    | '/mockups/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  MockupsRouteRoute: typeof MockupsRouteRouteWithChildren
   SignInRoute: typeof SignInRoute
 }
 
@@ -58,6 +124,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mockups': {
+      id: '/mockups'
+      path: '/mockups'
+      fullPath: '/mockups'
+      preLoaderRoute: typeof MockupsRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sign-in': {
       id: '/sign-in'
       path: '/sign-in'
@@ -65,11 +138,58 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mockups/': {
+      id: '/mockups/'
+      path: '/'
+      fullPath: '/mockups/'
+      preLoaderRoute: typeof MockupsIndexRouteImport
+      parentRoute: typeof MockupsRouteRoute
+    }
+    '/mockups/inspector': {
+      id: '/mockups/inspector'
+      path: '/inspector'
+      fullPath: '/mockups/inspector'
+      preLoaderRoute: typeof MockupsInspectorRouteImport
+      parentRoute: typeof MockupsRouteRoute
+    }
+    '/mockups/rail': {
+      id: '/mockups/rail'
+      path: '/rail'
+      fullPath: '/mockups/rail'
+      preLoaderRoute: typeof MockupsRailRouteImport
+      parentRoute: typeof MockupsRouteRoute
+    }
+    '/mockups/timeline': {
+      id: '/mockups/timeline'
+      path: '/timeline'
+      fullPath: '/mockups/timeline'
+      preLoaderRoute: typeof MockupsTimelineRouteImport
+      parentRoute: typeof MockupsRouteRoute
+    }
   }
 }
 
+interface MockupsRouteRouteChildren {
+  MockupsInspectorRoute: typeof MockupsInspectorRoute
+  MockupsRailRoute: typeof MockupsRailRoute
+  MockupsTimelineRoute: typeof MockupsTimelineRoute
+  MockupsIndexRoute: typeof MockupsIndexRoute
+}
+
+const MockupsRouteRouteChildren: MockupsRouteRouteChildren = {
+  MockupsInspectorRoute: MockupsInspectorRoute,
+  MockupsRailRoute: MockupsRailRoute,
+  MockupsTimelineRoute: MockupsTimelineRoute,
+  MockupsIndexRoute: MockupsIndexRoute,
+}
+
+const MockupsRouteRouteWithChildren = MockupsRouteRoute._addFileChildren(
+  MockupsRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  MockupsRouteRoute: MockupsRouteRouteWithChildren,
   SignInRoute: SignInRoute,
 }
 export const routeTree = rootRouteImport
