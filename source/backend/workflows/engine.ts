@@ -4,10 +4,11 @@ import { z } from "zod"
 import { appDatabase, appDatabaseUrl } from "@/database"
 import { appStorage } from "@/database/storage"
 import { HOUR, MINUTE, WEEK } from "@/utilities/primitives/durations"
-import { register, type Workflows } from "./define"
+import { register, type Workflow, type Workflows } from "./define"
 import { WORKFLOWS } from "./index"
 import { type WorkflowDependencies, workflowsProcess } from "./process"
 import { QUEUES } from "./queues"
+import { retryFrom, runOf, runWithStepsOf } from "./runs"
 
 // DBOS in the server: a library that runs workflows in this process and
 // keeps their checkpoints in the app's own database, in the `dbos` schema,
@@ -187,10 +188,11 @@ async function closeClient(client: Promise<DBOSClient> | null) {
 }
 
 /**
- * Starting workflows: through DBOS itself once it has launched in this
- * process, and through a client before then, onto the workflow's queue
- * either way, for whichever process runs it. The server's
- * `context.var.workflows`.
+ * Starting workflows, and reading and retrying their runs: through DBOS
+ * itself once it has launched in this process, and through a client before
+ * then, onto the workflow's queue either way, for whichever process runs
+ * it. Runs are read through DBOS's own functions, never its tables, which
+ * are DBOS's to change. The server's `context.var.workflows`.
  */
 export const dbosWorkflows: Workflows = {
     async start(workflow, input, options = {}) {
@@ -218,6 +220,103 @@ export const dbosWorkflows: Workflows = {
             id: handle.workflowID
         })
         return handle.workflowID
+    },
+
+    async runs({ limit = 100 } = {}) {
+        // DBOS loads a failed run's error with its output, and the list
+        // says why each failed
+        const listing = {
+            sortDesc: true,
+            limit,
+            loadInput: true,
+            loadOutput: true
+        }
+        const statuses = DBOS.isInitialized()
+            ? await DBOS.listWorkflows(listing)
+            : await (await dbosClient()).listWorkflows(listing)
+        return statuses.map((status) => runOf(status, knownWorkflows()))
+    },
+
+    async run(id) {
+        const listing = { workflowIDs: [id], loadInput: true, loadOutput: true }
+        const [status] = DBOS.isInitialized()
+            ? await DBOS.listWorkflows(listing)
+            : await (await dbosClient()).listWorkflows(listing)
+        if (status === undefined) {
+            return null
+        } else {
+            const steps = DBOS.isInitialized()
+                ? await DBOS.listWorkflowSteps(id)
+                : await (await dbosClient()).listWorkflowSteps(id)
+            return runWithStepsOf(status, steps ?? [], knownWorkflows())
+        }
+    },
+
+    async retry(id) {
+        const run = await dbosWorkflows.run(id)
+        if (run === null) {
+            return { ok: false, error: "not-found" }
+        } else if (run.status !== "failed" && run.status !== "canceled") {
+            return { ok: false, error: "not-stopped" }
+        } else {
+            // DBOS drops what the run kept from this step on, and puts it
+            // back on its workflow's queue under the same id
+            const options = {
+                startStep: retryFrom(run.steps),
+                queueName: knownWorkflows().find(
+                    (workflow) => workflow.name === run.workflow
+                )?.queue
+            }
+            if (DBOS.isInitialized()) {
+                await DBOS.rewindWorkflow(id, options)
+            } else {
+                await (await dbosClient()).rewindWorkflow(id, options)
+            }
+            console.info("A stopped run was started again", {
+                id,
+                workflow: run.workflow,
+                from_step: options.startStep
+            })
+            return { ok: true, data: null }
+        }
+    }
+}
+
+// The workflows this process knows, which name their runs: the ones it
+// started with, or every one there is before it has
+function knownWorkflows(): Workflow[] {
+    return workflowsProcess().dependencies?.workflows ?? WORKFLOWS
+}
+
+/**
+ * Puts runs on their workflows' queues from a script, like the seed, which
+ * runs no workflows itself: through a DBOS client of its own, on the
+ * database at `url`, closed once they're queued. Whichever process runs
+ * the workflows there, like a dev server, then runs them.
+ */
+export async function enqueueFromScript(
+    url: string,
+    runs: { workflow: Workflow<unknown>; input: unknown; id: string }[]
+) {
+    const client = await DBOSClient.create({
+        systemDatabaseUrl: url,
+        systemDatabaseSchemaName: "dbos",
+        systemDatabasePoolSize: 1,
+        applicationName: APPLICATION
+    })
+    try {
+        for (const { workflow, input, id } of runs) {
+            await client.enqueue(
+                {
+                    workflowName: workflow.name,
+                    queueName: workflow.queue,
+                    workflowID: id
+                },
+                input
+            )
+        }
+    } finally {
+        await client.destroy()
     }
 }
 

@@ -1,6 +1,8 @@
+import { tellTeamOfSignUp } from "@/backend/users/workflows"
+import { enqueueFromScript } from "@/backend/workflows/engine"
 import { connect, type Database } from "@/database"
 import { localDatabaseUrl } from "@/database/local"
-import { seedSessions, seedUsers } from "./users"
+import { seedSessions, seedUsers, signedUp } from "./users"
 
 /**
  * Sample rows for this checkout's database, so a dev server has something
@@ -59,12 +61,31 @@ export async function seed(database: Database) {
     })
 }
 
-/** `pnpm database:seed`: the seed, in this checkout's database. */
+/**
+ * `pnpm database:seed`: the seed, in this checkout's database, then real
+ * runs of the workflows the sample rows would have started, put on their
+ * queues for the dev server to run (and the dashboard's Workflows screen to
+ * show), rather than rows written into DBOS's tables, which are DBOS's.
+ * Seeding again starts them again, for the users it makes anew.
+ */
 export async function seedLocalDatabase() {
-    const database = connect(localDatabaseUrl(), 1)
+    const url = localDatabaseUrl()
+    const database = connect(url, 1)
     try {
         const written = await seed(database)
-        console.info("Seeded this checkout's database", { written })
+        const sign_ups = await signedUp(database)
+        await enqueueFromScript(
+            url,
+            sign_ups.map((user) => ({
+                workflow: tellTeamOfSignUp,
+                input: { user_id: user.id, email: user.email },
+                id: `tell-team-of-sign-up-${user.id}`
+            }))
+        )
+        console.info("Seeded this checkout's database", {
+            written,
+            runs_queued: sign_ups.length
+        })
     } finally {
         await database.$client.end()
     }

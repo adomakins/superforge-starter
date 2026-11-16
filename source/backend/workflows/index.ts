@@ -1,3 +1,4 @@
+import { tellTeamOfSignUp } from "@/backend/users/workflows"
 import type { Workflow } from "./define"
 
 /**
@@ -13,4 +14,4 @@ import type { Workflow } from "./define"
  * One that has shipped stays listed until no run of it is left (README.md,
  * "Changing a workflow").
  */
-export const WORKFLOWS: Workflow[] = []
+export const WORKFLOWS: Workflow[] = [tellTeamOfSignUp]

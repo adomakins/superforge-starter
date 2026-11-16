@@ -2,19 +2,25 @@ import { Hono } from "hono"
 import { sign_in_start, sign_in_verify } from "@/utilities/schemas/auth"
 import type { ApiEnvironment } from "../context"
 import { failure, validated } from "../failures"
+import { tellTeamOfSignUp } from "../users/workflows"
 import { endSession } from "./sessions"
-import { signIn } from "./sign-in"
+import { maySignIn, signIn } from "./sign-in"
 import {
     clearSessionCookie,
     maybeSignedIn,
     sessionToken,
     setSessionCookie
 } from "./signed-in"
-import { appOrigin, visitorIp } from "./visitor"
+import { appOrigin, visitorBrowser, visitorIp } from "./visitor"
 
 // What the page says when Infra can't be asked: the reason the route
 // answers, and why, for whoever reads the logs
 const UNAVAILABLE = "Sign-in isn't working right now. Try again soon."
+
+// What someone hears when only listed people may sign in, and they aren't
+// (access.ts)
+const NOT_LISTED =
+    "This address can't sign in here. Ask whoever runs this site to add you."
 
 /**
  * Signing in, under /api/auth, with no password: Infra emails a six-digit
@@ -33,9 +39,16 @@ export const authRoutes = new Hono<ApiEnvironment>()
 
     // Emails the code, and the link back to /sign-in when this is one of
     // the project's domains. In a dev server, which emails nothing, the
-    // answer holds the code and the link for the page to show.
+    // answer holds the code and the link for the page to show. When only
+    // listed people may sign in, anyone else is refused before Infra is
+    // asked, so nothing is emailed to them.
     .post("/auth/start", validated("json", sign_in_start), async (context) => {
         const { email } = context.req.valid("json")
+        if (
+            !(await maySignIn(context.var.database, context.var.access, email))
+        ) {
+            return failure(context, 403, "not-listed", NOT_LISTED)
+        }
         const started = await context.var.infra.startSignIn({
             email,
             ip: visitorIp(context),
@@ -97,13 +110,21 @@ export const authRoutes = new Hono<ApiEnvironment>()
                 context.req.valid("json")
             )
             if (verified.ok) {
-                const { user, token, joined } = await signIn(
-                    context.var.database,
-                    verified.data.email,
-                    sessionToken(context)
-                )
+                const signed_in = await signIn(context.var.database, {
+                    email: verified.data.email,
+                    replacing: sessionToken(context),
+                    user_agent: visitorBrowser(context),
+                    access: context.var.access
+                })
+                if (!signed_in.ok) {
+                    return failure(context, 403, signed_in.error, NOT_LISTED)
+                }
+                const { user, token, joined } = signed_in.data
                 setSessionCookie(context, token)
                 console.info("Signed in", { user_id: user.id, joined })
+                if (joined) {
+                    await tellTeam(context.var.workflows, user)
+                }
                 return context.json({ user }, 200)
             }
 
@@ -145,3 +166,25 @@ export const authRoutes = new Hono<ApiEnvironment>()
         clearSessionCookie(context)
         return context.json({ signed_out: true as const }, 200)
     })
+
+// Starts the workflow that tells the business's own people someone new has
+// signed up, once a sign-in has made them. It's named for the user, so it
+// runs once whatever happens to the request. A start that fails is logged
+// and leaves them signed in: the notice matters less than getting in.
+async function tellTeam(
+    workflows: ApiEnvironment["Variables"]["workflows"],
+    user: { id: string; email: string }
+) {
+    try {
+        await workflows.start(
+            tellTeamOfSignUp,
+            { user_id: user.id, email: user.email },
+            { id: `tell-team-of-sign-up-${user.id}` }
+        )
+    } catch (error) {
+        console.error("The sign-up's notice didn't start", {
+            user_id: user.id,
+            error
+        })
+    }
+}

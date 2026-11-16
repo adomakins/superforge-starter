@@ -2,12 +2,16 @@ import { type Context, Hono } from "hono"
 import { csrf } from "hono/csrf"
 import { appDatabase } from "@/database"
 import { appStorage } from "@/database/storage"
+import { accountRoutes } from "./account/routes"
+import { ACCESS } from "./auth/access"
 import { authRoutes } from "./auth/routes"
 import type { ApiEnvironment } from "./context"
 import { answerNotFound, answerUnexpected } from "./failures"
 import { healthRoutes } from "./health/routes"
 import { appInfra } from "./infra"
+import { userRoutes } from "./users/routes"
 import { dbosWorkflows } from "./workflows/engine"
+import { workflowRoutes } from "./workflows/routes"
 
 /**
  * The API under /api, with what every route sees on its `context`
@@ -21,16 +25,19 @@ export function apiWith(variables: () => ApiEnvironment["Variables"]) {
             .basePath("/api")
 
             // The database on `context.var.database` for every route, the
-            // Storage bucket on `context.var.storage`, the workflows'
-            // starter on `context.var.workflows`, and Infra on
-            // `context.var.infra`. Nothing under /api is kept in Railway's
-            // cache (source/node.ts), so each request reaches the server.
+            // Storage bucket on `context.var.storage`, the workflows on
+            // `context.var.workflows`, Infra on `context.var.infra`, and
+            // who can sign in on `context.var.access`. Nothing under /api is
+            // kept in Railway's cache (source/node.ts), so each request
+            // reaches the server.
             .use(async (context, next) => {
-                const { database, storage, workflows, infra } = variables()
+                const { database, storage, workflows, infra, access } =
+                    variables()
                 context.set("database", database)
                 context.set("storage", storage)
                 context.set("workflows", workflows)
                 context.set("infra", infra)
+                context.set("access", access)
                 await next()
                 context.header("Cache-Control", "no-store")
             })
@@ -58,6 +65,15 @@ export function apiWith(variables: () => ApiEnvironment["Variables"]) {
 
             // Signing in, through Infra, and out, under /auth
             .route("/", authRoutes)
+
+            // The signed-in person's own account, under /account
+            .route("/", accountRoutes)
+
+            // The business's side of the dashboard, for its own people:
+            // everyone who can sign in, under /users, and the workflows'
+            // runs, under /workflows
+            .route("/", userRoutes)
+            .route("/", workflowRoutes)
     )
 }
 
@@ -73,12 +89,16 @@ function fromThisHost(origin: string, context: Context) {
     )
 }
 
-/** The server's API, on its database, bucket, workflows and Infra. */
+/**
+ * The server's API, on its database, bucket, workflows and Infra, with who
+ * can sign in as auth/access.ts says.
+ */
 export const api = apiWith(() => ({
     database: appDatabase(),
     storage: appStorage(),
     workflows: dbosWorkflows,
-    infra: appInfra()
+    infra: appInfra(),
+    access: ACCESS
 }))
 
 export type AppType = typeof api
