@@ -2,24 +2,50 @@ import { Hono } from "hono"
 import { appDatabase } from "@/database"
 import { appStorage } from "@/database/storage"
 import type { ApiEnvironment } from "./context"
-import { healthRoutes } from "./health"
+import { answerNotFound, answerUnexpected } from "./failures"
+import { healthRoutes } from "./health/routes"
+import { dbosWorkflows } from "./workflows/engine"
 
-// The API, under /api. Each group of routes is a Hono app of its own, in a
-// file named for what it's about, mounted here, so a test can mount it on
-// an app that puts its own database and storage on its `context` (backend/tests/).
-export const api = new Hono<ApiEnvironment>()
-    .basePath("/api")
+/**
+ * The API under /api, with what every route sees on its `context`
+ * (context.ts): the server's, below, or a test's own, with a database of
+ * the test's (tests/support/api.ts). Each feature's routes are a Hono app of
+ * their own, in its folder's `routes.ts`, mounted here.
+ */
+export function apiWith(variables: () => ApiEnvironment["Variables"]) {
+    return (
+        new Hono<ApiEnvironment>()
+            .basePath("/api")
 
-    // The database, on `context.var.database` for every route, and the
-    // Storage bucket on `context.var.storage`. Nothing under /api is kept in Railway's
-    // cache (source/node.ts), so each request reaches the server.
-    .use(async (context, next) => {
-        context.set("database", appDatabase())
-        context.set("storage", appStorage())
-        await next()
-        context.header("Cache-Control", "no-store")
-    })
+            // The database on `context.var.database` for every route, the
+            // Storage bucket on `context.var.storage`, and the workflows'
+            // starter on `context.var.workflows`. Nothing under /api is kept
+            // in Railway's cache (source/node.ts), so each request reaches
+            // the server.
+            .use(async (context, next) => {
+                const { database, storage, workflows } = variables()
+                context.set("database", database)
+                context.set("storage", storage)
+                context.set("workflows", workflows)
+                await next()
+                context.header("Cache-Control", "no-store")
+            })
 
-    .route("/", healthRoutes)
+            // Every failure in the one shape (failures.ts): a path no route
+            // answers, and a route that threw
+            .notFound(answerNotFound)
+            .onError(answerUnexpected)
+
+            // Whether the server can reach its database
+            .route("/", healthRoutes)
+    )
+}
+
+/** The server's API, on its database, bucket and workflows. */
+export const api = apiWith(() => ({
+    database: appDatabase(),
+    storage: appStorage(),
+    workflows: dbosWorkflows
+}))
 
 export type AppType = typeof api

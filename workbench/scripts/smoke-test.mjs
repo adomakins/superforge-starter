@@ -11,10 +11,13 @@
 //   4. every prerendered page answers 200, the build's hashed files and
 //      /api answer with the cache headers source/node.ts promises, and a
 //      path that isn't a page answers 404
+//   5. its workflows launched: DBOS registers the app's queues in its own
+//      tables once it has (source/backend/workflows/engine.ts)
 //
 // So a start script that crashes, a migration that won't apply from empty,
-// a page the server can't find or a broken cache header fails here, not in
-// the deploy. It drops its database whatever happens.
+// a page the server can't find, a broken cache header or workflows that
+// never start fails here, not in the deploy. It drops its database
+// whatever happens.
 import { execFileSync, spawn } from "node:child_process"
 import { readdirSync } from "node:fs"
 import { createServer } from "node:net"
@@ -80,6 +83,9 @@ try {
     }
     await expectAnswer(base, "/api/health", 200, "no-store")
     await expectAnswer(base, "/no-page-here", 404, "no-store")
+
+    // 5. The workflows, which launch once the server is listening
+    await waitForWorkflows()
 } catch (error) {
     problems.push(error instanceof Error ? error.message : String(error))
 } finally {
@@ -152,6 +158,31 @@ async function waitForHealth(base) {
         await sleep(250)
     }
     throw new Error("/api/health didn't answer 200 within 30 seconds")
+}
+
+// Whether DBOS has launched in the server: it registers the app's queues as
+// it does, so its `queues` table has them
+async function waitForWorkflows() {
+    const deadline = Date.now() + 30_000
+    while (Date.now() < deadline) {
+        const client = new pg.Client({ connectionString: database_url.href })
+        await client.connect()
+        try {
+            const { rows } = await client.query(
+                "select count(*)::int as queues from dbos.queues"
+            )
+            if (rows[0].queues > 0) {
+                console.info(
+                    `  ✓ the workflows launched (${rows[0].queues} queues)`
+                )
+                return
+            }
+        } finally {
+            await client.end()
+        }
+        await sleep(250)
+    }
+    throw new Error("The workflows didn't launch within 30 seconds")
 }
 
 async function expectAnswer(base, path, status, cache_control) {

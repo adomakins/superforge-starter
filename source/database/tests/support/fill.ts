@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { getTableColumns, getTableName, is } from "drizzle-orm"
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core"
 import type pg from "pg"
+import { z } from "zod"
 import * as schema from "../../schema"
 
 // Sample rows in every table of a database, whatever version of the schema
@@ -24,22 +25,43 @@ const ROWS = 3
 // but not DBOS's, which DBOS migrates itself
 export const SCHEMAS = ["public", "auth", "internal"]
 
-type Column = {
-    name: string
-    type: string
-    nullable: boolean
-    defaulted: boolean
+const table_column = z.object({
+    name: z.string(),
+    type: z.string(),
+    nullable: z.boolean(),
+    defaulted: z.boolean(),
     // Part of the primary key or a unique constraint
-    unique: boolean
-    references: {
-        table: string
-        column: string
-        // Whether a column of its foreign key is in a key, so a row's
-        // parent is the parent's row of the same number, the same for every
-        // column of the key
-        keyed: boolean
-    } | null
-}
+    unique: z.boolean(),
+    references: z
+        .object({
+            table: z.string(),
+            column: z.string(),
+            // Whether a column of its foreign key is in a key, so a row's
+            // parent is the parent's row of the same number, the same for
+            // every column of the key
+            keyed: z.boolean()
+        })
+        .nullable()
+})
+type Column = z.infer<typeof table_column>
+
+// The catalog's rows, as tablesInOrder() reads them: each column, and each
+// column of a key, with what a foreign key points at
+const column_row = z.object({
+    table_name: z.string(),
+    column_name: z.string(),
+    type: z.string(),
+    nullable: z.boolean(),
+    defaulted: z.boolean()
+})
+const key_row = z.object({
+    table_name: z.string(),
+    column_name: z.string(),
+    kind: z.string(),
+    constraint_name: z.string().nullable(),
+    references_table: z.string().nullable(),
+    references_column: z.string().nullable()
+})
 
 /**
  * Fills every table in `SCHEMAS`, and says how many rows each got, by its
@@ -170,15 +192,7 @@ function qualifiedName(namespace: string, table: string) {
 }
 
 // The column a foreign key points at, from the catalog's row for it
-function referenceOf(
-    key:
-        | {
-              references_table: string | null
-              references_column: string | null
-          }
-        | undefined,
-    keyed: boolean
-) {
+function referenceOf(key: z.infer<typeof key_row> | undefined, keyed: boolean) {
     if (
         key === undefined ||
         key.references_table === null ||
@@ -197,13 +211,7 @@ function referenceOf(
 // Every table in `SCHEMAS`, with its columns, each after the tables its
 // foreign keys point at. A table is named as `tableName()` names it.
 async function tablesInOrder(client: pg.ClientBase) {
-    const { rows: columns } = await client.query<{
-        table_name: string
-        column_name: string
-        type: string
-        nullable: boolean
-        defaulted: boolean
-    }>(
+    const { rows: column_rows } = await client.query(
         `
         select ${qualifiedName("schemas", "tables")} as table_name,
             columns.attname as column_name, types.typname as type,
@@ -220,14 +228,7 @@ async function tablesInOrder(client: pg.ClientBase) {
     `,
         [SCHEMAS]
     )
-    const { rows: keys } = await client.query<{
-        table_name: string
-        column_name: string
-        kind: string
-        constraint_name: string | null
-        references_table: string | null
-        references_column: string | null
-    }>(
+    const { rows: key_rows } = await client.query(
         `
         select ${qualifiedName("schemas", "tables")} as table_name,
             columns.attname as column_name, constraints.contype as kind,
@@ -263,6 +264,8 @@ async function tablesInOrder(client: pg.ClientBase) {
     `,
         [SCHEMAS]
     )
+    const columns = column_row.array().parse(column_rows)
+    const keys = key_row.array().parse(key_rows)
 
     // Whether a column is in its table's primary key or a unique constraint
     const unique = (table: string, column: string) =>
