@@ -61,10 +61,13 @@ const postmaster_file = z.object({
 })
 
 /** What the watch does after a look */
-export type AfterLooking =
+export const after_looking = z.discriminatedUnion("action", [
     // Looks again, knowing since when nothing has been connected, if it
     // hasn't been since the last look
-    { action: "wait"; idle_since: number | undefined } | { action: "stop" }
+    z.object({ action: z.literal("wait"), idle_since: z.number().optional() }),
+    z.object({ action: z.literal("stop") })
+])
+export type AfterLooking = z.infer<typeof after_looking>
 
 /**
  * Decides, from how many connections a look found, since when there had
@@ -137,6 +140,10 @@ async function isWatched(url: string) {
     }
 }
 
+/** How long the watch waits between looks, and for nothing connected. */
+const watch_timing = z.object({ idle_for: z.number(), look_every: z.number() })
+type WatchTiming = z.infer<typeof watch_timing>
+
 /**
  * The watch: holds a connection to the server whose data folder is `data`,
  * and stops the server once nothing else has been connected for `idle_for`.
@@ -145,7 +152,7 @@ async function isWatched(url: string) {
  */
 export async function watch(
     data: string,
-    timing = { idle_for: IDLE_FOR, look_every: LOOK_EVERY }
+    timing: WatchTiming = { idle_for: IDLE_FOR, look_every: LOOK_EVERY }
 ) {
     const server = readPostmaster(data)
     const client = new pg.Client({
@@ -205,7 +212,7 @@ export async function watch(
 async function lookUntilIdle(
     client: pg.Client,
     pid: number,
-    timing: { idle_for: number; look_every: number }
+    timing: WatchTiming
 ) {
     let idle_since: number | undefined
     for (;;) {

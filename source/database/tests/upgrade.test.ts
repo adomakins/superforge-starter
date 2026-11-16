@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import pg from "pg"
 import { describe, expect, test } from "vitest"
+import { z } from "zod"
 import {
     migrateDatabase,
     migrationsJournal,
@@ -106,7 +107,7 @@ function migrationsAt(ref: string) {
 
 // How many tables the database has in the schemas `fill()` fills
 async function tableCount(client: pg.Client) {
-    const { rows } = await client.query<{ tables: number }>(
+    const { rows } = await client.query(
         `
         select count(*)::int as tables
         from pg_class tables
@@ -115,12 +116,7 @@ async function tableCount(client: pg.Client) {
     `,
         [SCHEMAS]
     )
-    const [counted] = rows
-    if (counted === undefined) {
-        throw new Error("Counting the tables answered no row")
-    } else {
-        return counted.tables
-    }
+    return z.object({ tables: z.number() }).parse(rows[0]).tables
 }
 
 async function withClient<Result>(

@@ -74,12 +74,13 @@ const dependencies: WorkflowDependencies = {
 }
 
 // A run's status as DBOS's own table has it, for while DBOS isn't running
+const status_row = z.object({ status: z.string() })
 async function storedStatus(id: string) {
-    const { rows } = await database.$client.query<{ status: string }>(
+    const { rows } = await database.$client.query(
         "select status from dbos.workflow_status where workflow_uuid = $1",
         [id]
     )
-    return rows[0]?.status
+    return status_row.parse(rows[0]).status
 }
 
 beforeAll(async () => {
@@ -166,9 +167,9 @@ describe("the workflows on DBOS", { timeout: 60_000 }, () => {
         expect(await pruneFinishedRuns(Date.now() + 1000)).toBe(finished.length)
 
         expect(await DBOS.listWorkflows({})).toEqual([])
-        const { rows } = await database.$client.query<{ steps: number }>(
+        const { rows } = await database.$client.query(
             "select count(*)::int as steps from dbos.operation_outputs"
         )
-        expect(rows[0]?.steps).toBe(0)
+        expect(z.object({ steps: z.number() }).parse(rows[0]).steps).toBe(0)
     })
 })

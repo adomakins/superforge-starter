@@ -1,5 +1,5 @@
 import { DBOS, type StepConfig } from "@dbos-inc/dbos-sdk"
-import type { z } from "zod"
+import { z } from "zod"
 import type { Database } from "@/database"
 import type { Storage } from "@/database/storage"
 import { MINUTE } from "@/utilities/primitives/durations"
@@ -38,6 +38,10 @@ export type WorkflowContext = {
     ) => Promise<Result>
 }
 
+/** What starting a run can say about it: the id it goes by. */
+export const start_options = z.object({ id: z.string().optional() })
+export type StartOptions = z.infer<typeof start_options>
+
 /** How a route starts workflows: `context.var.workflows` (engine.ts's). */
 export type Workflows = {
     /**
@@ -49,7 +53,7 @@ export type Workflows = {
     start<Input>(
         workflow: Workflow<Input>,
         input: Input,
-        options?: { id?: string }
+        options?: StartOptions
     ): Promise<string>
 }
 

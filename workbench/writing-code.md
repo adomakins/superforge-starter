@@ -100,8 +100,9 @@ matters:
   the other three. It has two folders, and a file that fits neither sits
   at the top, named for what it's about:
   - **`primitives/`**, what knows nothing of the app, and could be copied
-    into another one unchanged: `durations.ts`'s `MINUTE` and `WEEK`.
-    Nothing here imports even from the rest of `utilities/`.
+    into another one unchanged: `result.ts`'s `operationResult()`, the
+    schema of every tagged result, and `durations.ts`'s `MINUTE` and
+    `WEEK`. Nothing here imports even from the rest of `utilities/`.
   - **`schemas/`**, the zod schemas both sides check with, a file per
     feature, so a form and the route it posts to check with the same one:
     `failures.ts`, the shape every failure takes. A schema only one side
@@ -132,16 +133,17 @@ matters:
   API, like `health.ts`.
 - **An operation** → a plain function in its feature's folder that takes
   the database (a `Database`, so it runs inside a transaction too) and its
-  input, and answers an `OperationResult` when it can fail in a way its
-  caller handles. It's the only code that queries the database, so the
+  input, and answers a tagged result, with its schema beside it, when it
+  can fail in a way its caller handles
+  ([Tagged results](#tagged-results-for-expected-failures)). It's the only code that queries the database, so the
   checks a write needs beyond its input's shape (that the row exists, that
   the user may) live here, where every way in gets them.
 - **A call to an outside service** (an email provider, a payments API) →
   one wrapper for that service, in a folder of its own under `backend/`
   named for it, which every route and step calls; never a bare `fetch` in
   a route. The wrapper owns its credential, its timeouts, its retries and
-  its pacing, logs each call's outcome, and answers an `OperationResult`
-  for the failures its callers handle. A test hands its callers a fake of
+  its pacing, logs each call's outcome, and answers a tagged result for
+  the failures its callers handle. A test hands its callers a fake of
   it.
 - **A table or a column** → `source/database/schema.ts`, with a migration
   from `pnpm database:generate` ([Migrations](#migrations)).
@@ -186,7 +188,7 @@ isn't there, 409 for a conflict, 503 for a dependency that's down.
 
 - **An expected failure** is answered with
   `failure(context, status, reason, message)` (`backend/failures.ts`),
-  usually from the `OperationResult` an operation answered:
+  usually from the result an operation answered:
   `failure(context, 404, found.error, "No such contact")`. The typed client
   knows each reason a route can answer.
 - **Input that doesn't fit** is answered by `validated()` itself: 400,
@@ -594,14 +596,73 @@ almost always a signal that something is mistyped upstream:
 
 The rare legitimate case deserves a comment explaining why it's safe.
 
-### Tagged results for expected failures
+### Types come from zod schemas
 
-Functions that can fail in expected, recoverable ways return an
-`OperationResult` instead of throwing. It and `AsyncOperation` are global
-types, declared in `source/globals.d.ts`, so no file imports them.
+**Every type that describes data is inferred from a zod schema**, never
+written out by hand: what a route takes and answers, what a function
+answers, a workflow's input and its steps' results, a file's contents,
+configuration, the rows a raw query reads, and any object or union a
+function takes or hands back. One declaration is then both the type and
+the check, so the two can't drift apart, and data that comes in from
+outside is checked against the same shape the code was written for.
 
 ```typescript
-async function getPost(slug: string): AsyncOperation<Post, "not-found"> {
+// Good: the schema, and its type beside it
+export const contact = z.object({ name: z.string(), email: z.email() })
+export type Contact = z.infer<typeof contact>
+
+// Bad: a shape the type checker trusts and nothing checks
+export type Contact = { name: string; email: string }
+```
+
+- **A schema is named in snake_case for what it describes**, and its type,
+  when it needs a name, the same in PascalCase right below it.
+- **Data that comes from outside the code is parsed where it comes in**: a
+  request (`validated()`), a raw query's rows, a file, the environment, a
+  stored result. `.parse()` when it must fit, `.safeParse()` when not
+  fitting is a case to handle; never a generic that asserts its shape, like
+  `client.query<{ taken: boolean }>()`, nor an `as`.
+- **One schema per shape.** A related shape comes from it with `.pick()`,
+  `.omit()`, `.extend()` or `.partial()`, never a second declaration.
+- **A schema lives with what it describes**, and moves to
+  `source/utilities/schemas/` once both sides use it.
+
+The exceptions are types zod can't describe, or that something else
+already holds to:
+
+- **What a package types and checks itself**: Drizzle's tables and their
+  rows (`typeof posts.$inferSelect`), which the table's definition and
+  Postgres hold to; Hono's context; DBOS's own types; the DOM's `Response`.
+  One goes into a schema as `z.custom<Post>()`, typed and trusted as the
+  package's.
+- **Shapes made of code rather than data**: a function's signature, what
+  code is handed to run with (`ApiEnvironment`, `WorkflowContext`,
+  `ObjectStore`), a class, a client or a connection, and a component's
+  props.
+- **A local variable's annotation** (`const counts: Record<string, number>
+  = {}`), and a parameter that's a single value (`slug: string`).
+
+### Tagged results for expected failures
+
+Functions that can fail in expected, recoverable ways answer a tagged
+result instead of throwing: `{ ok: true, data }`, or `{ ok: false, error }`.
+Its schema comes from `operationResult(data, error)`
+(`source/utilities/primitives/result.ts`), one beside each function, and
+its type from that, as every type does:
+
+```typescript
+type Post = typeof posts.$inferSelect
+
+export const found_post = operationResult(
+    z.custom<Post>(),
+    z.enum(["not-found"])
+)
+export type FoundPost = z.infer<typeof found_post>
+
+export async function findPost(
+    database: Database,
+    slug: string
+): Promise<FoundPost> {
     const [post] = await database
         .select()
         .from(posts)
@@ -625,9 +686,12 @@ if (!found.ok) {
 const post = found.data
 ```
 
-- **Always name the `Err` type** — a literal union
-  (`"not-found" | "unpublished"`) when the name is the whole story, a
-  structured object when the caller needs context.
+- **Always name the error** — an enum of reasons
+  (`z.enum(["not-found", "unpublished"])`) when the reason is the whole
+  story, an object when the caller needs context. Then the reasons are
+  values too, for a test to go through every one or a page to put words
+  to, and a result that's stored or sent, like a workflow step's, is
+  checked against its schema as it's read back.
 - **Don't return bare sentinel unions** (`Promise<Post | "not-found">`). They
   collapse when the success type overlaps the sentinel (`string | "missing"`
   _is_ `string`) and can never carry a payload.

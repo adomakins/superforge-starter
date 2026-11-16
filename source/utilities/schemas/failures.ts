@@ -1,5 +1,20 @@
 import { z } from "zod"
 
+/** What went wrong, in a failure the API answers. */
+export const failure_details = z.object({
+    // For a program to branch on: a kebab-case word or two, like "invalid",
+    // "not-found" or "signed-out", that never changes once a route answers
+    // with it
+    reason: z.string(),
+    // The same for a person, in a sentence
+    message: z.string(),
+    // For "invalid": what in the request didn't fit, field by field
+    issues: z
+        .array(z.object({ path: z.string(), message: z.string() }))
+        .optional()
+})
+export type ApiFailure = z.infer<typeof failure_details>
+
 /**
  * How every route under /api answers when it fails, so the site, scripts
  * and agents read a failure the same way, whatever route it came from.
@@ -7,19 +22,4 @@ import { z } from "zod"
  * (frontend/queries/failures.ts). Change it only by adding optional fields:
  * whatever reads it was written against this shape.
  */
-export const api_failure = z.object({
-    error: z.object({
-        // What went wrong, for a program to branch on: a kebab-case word or
-        // two, like "invalid", "not-found" or "signed-out", that never
-        // changes once a route answers with it
-        reason: z.string(),
-        // The same for a person, in a sentence
-        message: z.string(),
-        // For "invalid": what in the request didn't fit, field by field
-        issues: z
-            .array(z.object({ path: z.string(), message: z.string() }))
-            .optional()
-    })
-})
-
-export type ApiFailure = z.infer<typeof api_failure>["error"]
+export const api_failure = z.object({ error: failure_details })

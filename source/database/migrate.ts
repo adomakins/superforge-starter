@@ -76,7 +76,16 @@ export async function migrateDatabase(url: string, folder = MIGRATIONS_FOLDER) {
  * `drizzle.__drizzle_migrations`: the hash of its SQL, and its time in the
  * journal.
  */
-export type Migration = { hash: string; when: number }
+export const migration = z.object({ hash: z.string(), when: z.number() })
+export type Migration = z.infer<typeof migration>
+
+// Whether Drizzle's table is there yet, and its rows. `created_at` is a
+// bigint, which pg hands over as text.
+const regclass_row = z.object({ table: z.string().nullable() })
+const recorded_row = z.object({
+    hash: z.string(),
+    created_at: z.coerce.number()
+})
 
 // What drizzle-kit writes in meta/_journal.json, as far as this reads it
 const journal_file = z.looseObject({
@@ -111,23 +120,20 @@ export function migrationsJournal(folder = MIGRATIONS_FOLDER): Migration[] {
 export async function recordedMigrations(
     client: pg.ClientBase
 ): Promise<Migration[]> {
-    const { rows: found } = await client.query<{ table: string | null }>(
+    const { rows: found } = await client.query(
         "select to_regclass('drizzle.__drizzle_migrations')::text as table"
     )
-    if (found[0]?.table === null || found[0]?.table === undefined) {
+    const { table } = regclass_row.parse(found[0])
+    if (table === null) {
         return []
     } else {
-        // `created_at` is a bigint, which pg hands over as text
-        const { rows } = await client.query<{
-            hash: string
-            created_at: string
-        }>(
+        const { rows } = await client.query(
             "select hash, created_at from drizzle.__drizzle_migrations order by created_at"
         )
-        return rows.map((row) => ({
-            hash: row.hash,
-            when: Number(row.created_at)
-        }))
+        return recorded_row
+            .array()
+            .parse(rows)
+            .map((row) => ({ hash: row.hash, when: row.created_at }))
     }
 }
 

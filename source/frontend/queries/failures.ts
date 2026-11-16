@@ -6,10 +6,9 @@ import { type ApiFailure, api_failure } from "@/utilities/schemas/failures"
  * the page. One that isn't in that shape, like the page Railway's proxy
  * answers with while the server is down, reads as `unavailable`.
  */
-export async function readFailure(response: {
-    status: number
-    json(): Promise<unknown>
-}): Promise<ApiFailure> {
+export async function readFailure(
+    response: Pick<Response, "status" | "json">
+): Promise<ApiFailure> {
     try {
         const parsed = api_failure.safeParse(await response.json())
         if (parsed.success) {

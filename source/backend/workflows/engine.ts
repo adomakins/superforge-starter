@@ -1,5 +1,6 @@
 import { DBOS, DBOSClient } from "@dbos-inc/dbos-sdk"
 import pg from "pg"
+import { z } from "zod"
 import { appDatabase, appDatabaseUrl } from "@/database"
 import { appStorage } from "@/database/storage"
 import { HOUR, MINUTE, WEEK } from "@/utilities/primitives/durations"
@@ -36,6 +37,9 @@ const PRUNE_PAGE = 1000
 
 // How long a start that failed waits to try again
 const START_AGAIN_AFTER = MINUTE
+
+// What trying for the gate answers
+const taken_row = z.object({ taken: z.boolean() })
 
 /** The server's own: its database and bucket, and every workflow. */
 export function appWorkflowDependencies(): WorkflowDependencies {
@@ -297,11 +301,11 @@ export async function takeGate(
     holding(gate)
     await gate.connect()
     const [first, second] = GATE
-    const { rows } = await gate.query<{ taken: boolean }>(
+    const { rows } = await gate.query(
         "select pg_try_advisory_lock($1, $2) as taken",
         [first, second]
     )
-    if (rows[0]?.taken !== true) {
+    if (!taken_row.parse(rows[0]).taken) {
         console.info(
             "Waiting at the workflows' gate, which another process holds"
         )

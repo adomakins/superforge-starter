@@ -1,7 +1,13 @@
 import { queryOptions } from "@tanstack/react-query"
+import { z } from "zod"
 import { client } from "@/backend/client"
-import type { ApiFailure } from "@/utilities/schemas/failures"
+import { operationResult } from "@/utilities/primitives/result"
+import { failure_details } from "@/utilities/schemas/failures"
 import { readFailure } from "./failures"
+
+/** What the health check answers the page: up, or the failure the API sent. */
+export const health_status = operationResult(z.null(), failure_details)
+export type HealthStatus = z.infer<typeof health_status>
 
 /**
  * Whether the server and its database are up (`GET /api/health`), through
@@ -12,7 +18,7 @@ import { readFailure } from "./failures"
  */
 export const healthQuery = queryOptions({
     queryKey: ["health"],
-    queryFn: async (): AsyncOperation<null, ApiFailure> => {
+    queryFn: async (): Promise<HealthStatus> => {
         const response = await client.api.health.$get()
         if (response.ok) {
             return { ok: true, data: null }
