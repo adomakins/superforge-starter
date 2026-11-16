@@ -30,6 +30,7 @@ source/
 public/          static files, like the favicon
 workbench/       docs and scripts for working on the repo
 .railway/        the Railway project, as code
+.superforge/     which template this came from, and its release
 ```
 
 ## Develop
@@ -53,6 +54,21 @@ one-time job for each copy
 
 Claude (and humans): start with [CLAUDE.md](CLAUDE.md).
 
+## Updates
+
+The template this codebase came from keeps improving, in releases listed
+in [CHANGELOG.md](CHANGELOG.md), and `.superforge/superforge.json` says
+which one this codebase is on. To take the latest, ask Claude to update
+from the template. It follows
+[workbench/updating.md](workbench/updating.md): it says what's coming and
+anything it needs from you, then opens a PR with the update for you to
+merge.
+
+## License
+
+The template's code is under the MIT license ([LICENSE](LICENSE)): it's
+yours to keep, change and build on. What you add to it is your own.
+
 ## This template
 
 This repository is a GitHub template (Use this template → Create a new
@@ -62,3 +78,20 @@ It lives at <https://github.com/superforge-studio/starter-template>, and
 its own copy runs on Railway, in the `superforge-starter` project, at
 <https://superforge-starter.up.railway.app>. A copy made from it replaces
 this section, and the names above, in `START-HERE.md`'s step 5.
+
+**Releases.** A PR that changes what a copy gets adds its notes under
+`## Unreleased` at the top of `CHANGELOG.md`, written as that file's "How
+a release is written" says. A release is a PR that gives the heading its
+version and day (`## 0.2.0 (2026-12-01)`) and sets `version` in
+`.superforge/superforge.json` to match. Once it merges, tag the merge and
+push the tag:
+
+```bash
+git switch main && git pull
+git tag -a v0.2.0 -m "v0.2.0"
+git push origin v0.2.0
+```
+
+Copies update from the tags, so a release is out once its tag is pushed.
+A copy made from `main` between releases already has some of the next
+one, which its update merges cleanly.

@@ -29,6 +29,3 @@ output/
 .tanstack/
 .output/
 *.tsbuildinfo
-
-# Design-hook cache (per-machine)
-.impeccable/

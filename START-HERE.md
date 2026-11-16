@@ -64,8 +64,9 @@ is drawn with ([shadcn's theming](https://ui.shadcn.com/docs/theming)).
   replace the placeholder cube in `source/frontend/routes/index.tsx`'s
   header (the favicon, in an `<img>`) with the logo.
 
-Use the `impeccable` skill for this step and the next: it knows how to
-turn a brand into a theme that holds together.
+Read `workbench/designing.md` before this step and the next: it lists the
+habits that make a site look generated, and the checks the page has to
+pass.
 
 ## 3. Write the home page
 
@@ -111,6 +112,11 @@ short, lowercase name for the business (like `acme-plumbing`):
 - `README.md`: its title and first paragraph, and the "This template"
   section, which goes.
 
+Leave `.superforge/superforge.json` as it is: its `starter-template` is
+the template this codebase came from, which updates read
+(`workbench/updating.md`), not this codebase's name. Keep `CHANGELOG.md`
+and `LICENSE` too.
+
 ## 6. Check it, and ship it
 
 ```bash
@@ -118,7 +124,8 @@ pnpm format && pnpm check
 ```
 
 Then `pnpm dev` and look at the home page at http://localhost:3000, on a
-computer's width and a phone's, in light and dark. When it's right, delete
+computer's width and a phone's, in light and dark, against the checks in
+`workbench/designing.md`. When it's right, delete
 this file and `CLAUDE.md`'s first section, commit on a branch, and follow
 `workbench/commit-and-deploy.md` to put it on Railway: its "Setting up
 Railway" section is the one-time setup, which needs the owner for a token
