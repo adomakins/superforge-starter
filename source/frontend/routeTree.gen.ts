@@ -10,33 +10,91 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MockupsRouteRouteImport } from './routes/mockups/route'
+import { Route as MockupsIndexRouteImport } from './routes/mockups/index'
+import { Route as MockupsLineRouteImport } from './routes/mockups/line'
+import { Route as MockupsManifestRouteImport } from './routes/mockups/manifest'
+import { Route as MockupsTreeRouteImport } from './routes/mockups/tree'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MockupsRouteRoute = MockupsRouteRouteImport.update({
+  id: '/mockups',
+  path: '/mockups',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MockupsIndexRoute = MockupsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MockupsRouteRoute,
+} as any)
+const MockupsLineRoute = MockupsLineRouteImport.update({
+  id: '/line',
+  path: '/line',
+  getParentRoute: () => MockupsRouteRoute,
+} as any)
+const MockupsManifestRoute = MockupsManifestRouteImport.update({
+  id: '/manifest',
+  path: '/manifest',
+  getParentRoute: () => MockupsRouteRoute,
+} as any)
+const MockupsTreeRoute = MockupsTreeRouteImport.update({
+  id: '/tree',
+  path: '/tree',
+  getParentRoute: () => MockupsRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/mockups': typeof MockupsRouteRouteWithChildren
+  '/mockups/line': typeof MockupsLineRoute
+  '/mockups/manifest': typeof MockupsManifestRoute
+  '/mockups/tree': typeof MockupsTreeRoute
+  '/mockups/': typeof MockupsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/mockups/line': typeof MockupsLineRoute
+  '/mockups/manifest': typeof MockupsManifestRoute
+  '/mockups/tree': typeof MockupsTreeRoute
+  '/mockups': typeof MockupsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/mockups': typeof MockupsRouteRouteWithChildren
+  '/mockups/line': typeof MockupsLineRoute
+  '/mockups/manifest': typeof MockupsManifestRoute
+  '/mockups/tree': typeof MockupsTreeRoute
+  '/mockups/': typeof MockupsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/mockups'
+    | '/mockups/line'
+    | '/mockups/manifest'
+    | '/mockups/tree'
+    | '/mockups/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/mockups/line' | '/mockups/manifest' | '/mockups/tree' | '/mockups'
+  id:
+    | '__root__'
+    | '/'
+    | '/mockups'
+    | '/mockups/line'
+    | '/mockups/manifest'
+    | '/mockups/tree'
+    | '/mockups/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  MockupsRouteRoute: typeof MockupsRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +106,65 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mockups': {
+      id: '/mockups'
+      path: '/mockups'
+      fullPath: '/mockups'
+      preLoaderRoute: typeof MockupsRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mockups/': {
+      id: '/mockups/'
+      path: '/'
+      fullPath: '/mockups/'
+      preLoaderRoute: typeof MockupsIndexRouteImport
+      parentRoute: typeof MockupsRouteRoute
+    }
+    '/mockups/line': {
+      id: '/mockups/line'
+      path: '/line'
+      fullPath: '/mockups/line'
+      preLoaderRoute: typeof MockupsLineRouteImport
+      parentRoute: typeof MockupsRouteRoute
+    }
+    '/mockups/manifest': {
+      id: '/mockups/manifest'
+      path: '/manifest'
+      fullPath: '/mockups/manifest'
+      preLoaderRoute: typeof MockupsManifestRouteImport
+      parentRoute: typeof MockupsRouteRoute
+    }
+    '/mockups/tree': {
+      id: '/mockups/tree'
+      path: '/tree'
+      fullPath: '/mockups/tree'
+      preLoaderRoute: typeof MockupsTreeRouteImport
+      parentRoute: typeof MockupsRouteRoute
+    }
   }
 }
 
+interface MockupsRouteRouteChildren {
+  MockupsLineRoute: typeof MockupsLineRoute
+  MockupsManifestRoute: typeof MockupsManifestRoute
+  MockupsTreeRoute: typeof MockupsTreeRoute
+  MockupsIndexRoute: typeof MockupsIndexRoute
+}
+
+const MockupsRouteRouteChildren: MockupsRouteRouteChildren = {
+  MockupsLineRoute: MockupsLineRoute,
+  MockupsManifestRoute: MockupsManifestRoute,
+  MockupsTreeRoute: MockupsTreeRoute,
+  MockupsIndexRoute: MockupsIndexRoute,
+}
+
+const MockupsRouteRouteWithChildren = MockupsRouteRoute._addFileChildren(
+  MockupsRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  MockupsRouteRoute: MockupsRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
