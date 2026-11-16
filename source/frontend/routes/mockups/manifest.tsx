@@ -8,6 +8,7 @@ import {
 } from "@/frontend/components/mockups/environment"
 import { Footer } from "@/frontend/components/mockups/footer"
 import { useHealth } from "@/frontend/components/mockups/health"
+import { PLANNED_PARTS } from "@/frontend/components/mockups/planned"
 import {
     PromptChip,
     SayToClaude
@@ -16,6 +17,8 @@ import {
     apiStatus,
     databaseStatus,
     deployStatus,
+    type Recovery,
+    RecoveryNote,
     recoveryFor,
     type Status,
     StatusLine,
@@ -36,28 +39,16 @@ type Part = {
     what: string
     path: string | null
     status: Status
+    // Which part this is, when a failed check can be about it
+    checks?: Recovery["part"]
 }
 
-const PLANNED: Part[] = [
-    {
-        name: "Sign-in",
-        what: "Your customers and staff sign in, through Superforge Infra.",
-        path: ".superforge/superforge.json",
-        status: { tone: "planned", label: "Planned" }
-    },
-    {
-        name: "Dashboard",
-        what: "Who can sign in, and the work running in the background.",
-        path: null,
-        status: { tone: "planned", label: "Planned" }
-    },
-    {
-        name: "Workflows",
-        what: "Background work that picks up where it stopped, on DBOS.",
-        path: "source/backend/workflows/",
-        status: { tone: "planned", label: "Planned" }
-    }
-]
+const PLANNED: Part[] = PLANNED_PARTS.map((part) => ({
+    name: part.name,
+    what: part.whatInFull,
+    path: part.path,
+    status: { tone: "planned", label: "Planned" }
+}))
 
 const NEXT_ASKS = [
     {
@@ -79,7 +70,7 @@ const NEXT_ASKS = [
 ] as const
 
 function Manifest() {
-    const { health, checking, checkAgain } = useHealth()
+    const { health, checkedAt, checking, checkAgain } = useHealth()
     const recovery = recoveryFor(health)
 
     const parts: Part[] = [
@@ -93,13 +84,15 @@ function Manifest() {
             name: "API",
             what: "Everything the site reads and writes goes through it, under /api.",
             path: "source/backend/",
-            status: apiStatus(health)
+            status: apiStatus(health),
+            checks: "api"
         },
         {
             name: "Database",
             what: "Postgres, for what the business keeps: customers, orders, bookings.",
             path: "source/database/schema.ts",
-            status: databaseStatus(health)
+            status: databaseStatus(health),
+            checks: "database"
         },
         {
             name: "Storage",
@@ -152,22 +145,34 @@ function Manifest() {
                     >
                         In the box
                     </h2>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={checkAgain}
-                        disabled={checking}
-                        className="-mr-2 text-muted-foreground"
-                    >
-                        <RotateCw
-                            aria-hidden
-                            className={cn(
-                                checking &&
-                                    "animate-spin motion-reduce:animate-none"
-                            )}
-                        />
-                        Check again
-                    </Button>
+                    <span className="flex items-center gap-1">
+                        {checkedAt !== null && !checking && (
+                            <span className="text-muted-foreground text-xs tabular-nums">
+                                Checked at{" "}
+                                {checkedAt.toLocaleTimeString([], {
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                    second: "2-digit"
+                                })}
+                            </span>
+                        )}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={checkAgain}
+                            disabled={checking}
+                            className="-mr-2 text-muted-foreground"
+                        >
+                            <RotateCw
+                                aria-hidden
+                                className={cn(
+                                    checking &&
+                                        "animate-spin motion-reduce:animate-none"
+                                )}
+                            />
+                            Check again
+                        </Button>
+                    </span>
                 </div>
 
                 <div className="@container">
@@ -181,18 +186,18 @@ function Manifest() {
                     </div>
                     <ul>
                         {parts.map((part) => (
-                            <PartRow key={part.name} part={part} />
+                            <PartRow
+                                key={part.name}
+                                part={part}
+                                recovery={
+                                    recovery !== null &&
+                                    recovery.part === part.checks
+                                        ? recovery
+                                        : null
+                                }
+                            />
                         ))}
                     </ul>
-
-                    {recovery !== null && (
-                        <p
-                            role="alert"
-                            className="mt-3 rounded-lg bg-destructive/10 px-4 py-3 text-pretty text-destructive text-sm"
-                        >
-                            {recovery}
-                        </p>
-                    )}
 
                     <h3 className="mt-8 border-b pb-2 font-medium text-muted-foreground text-xs">
                         Coming to Foundation
@@ -237,8 +242,17 @@ function Manifest() {
 
 // One part: its name, what it's for and where it lives, and its status. In
 // a wide container, three aligned columns; in a narrow one, the name and
-// status on one line and the rest under them.
-function PartRow({ part, planned = false }: { part: Part; planned?: boolean }) {
+// status on one line and the rest under them. A part the check failed on
+// says how to fix it, right under it.
+function PartRow({
+    part,
+    planned = false,
+    recovery = null
+}: {
+    part: Part
+    planned?: boolean
+    recovery?: Recovery | null
+}) {
     return (
         <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 border-b py-3.5 last:border-b-0 @xl:grid-cols-[7rem_minmax(0,1fr)_12rem] @xl:gap-x-6">
             <span
@@ -263,6 +277,12 @@ function PartRow({ part, planned = false }: { part: Part; planned?: boolean }) {
                     </code>
                 )}
             </span>
+            {recovery !== null && (
+                <RecoveryNote
+                    recovery={recovery}
+                    className="col-span-2 mt-2 @xl:col-span-2 @xl:col-start-2"
+                />
+            )}
         </li>
     )
 }

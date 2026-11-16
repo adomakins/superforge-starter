@@ -9,14 +9,18 @@ import {
 } from "@/frontend/components/mockups/environment"
 import { Footer } from "@/frontend/components/mockups/footer"
 import { type Health, useHealth } from "@/frontend/components/mockups/health"
+import { PLANNED_PARTS } from "@/frontend/components/mockups/planned"
 import { PromptChip } from "@/frontend/components/mockups/say-to-claude"
 import {
     apiStatus,
     databaseStatus,
+    type Recovery,
+    RecoveryNote,
     recoveryFor,
     type Status,
     StatusLine,
     storageStatus,
+    type Tone,
     websiteStatus
 } from "@/frontend/components/mockups/status"
 import { Button } from "@/frontend/components/primitives/button"
@@ -81,27 +85,19 @@ type Station = {
     path?: string
     status?: Status
     shape: "origin" | "stop" | "branch" | "planned"
+    // Which part this is, when a failed check can be about it
+    checks?: Recovery["part"]
 }
 
-const PLANNED: Station[] = [
-    {
-        name: "Workflows",
-        kind: "DBOS",
-        what: "Background work that picks up where it stopped.",
-        shape: "planned"
-    },
-    {
-        name: "Sign-in",
-        kind: "Superforge Infra",
-        what: "Your customers and staff sign in.",
-        shape: "planned"
-    },
-    {
-        name: "Dashboard",
-        what: "Who can sign in, and the work running in the background.",
-        shape: "planned"
-    }
-]
+const PLANNED: Station[] = PLANNED_PARTS.map((part) => ({
+    name: part.name,
+    kind: part.kind ?? undefined,
+    what: part.what,
+    shape: "planned"
+}))
+
+// Where the API's stop is on the line, the first the check can find broken
+const API_POSITION = 2
 
 function LineMap() {
     const { health, checking, checkAgain } = useHealth()
@@ -136,7 +132,8 @@ function LineMap() {
             what: "Everything the site reads and writes goes through it.",
             path: "source/backend/",
             status: apiStatus(seen),
-            shape: "stop"
+            shape: "stop",
+            checks: "api"
         },
         {
             name: "Storage",
@@ -152,7 +149,8 @@ function LineMap() {
             what: "What the business keeps: customers, orders, bookings.",
             path: "source/database/schema.ts",
             status: databaseStatus(seen),
-            shape: "stop"
+            shape: "stop",
+            checks: "database"
         }
     ]
 
@@ -166,7 +164,7 @@ function LineMap() {
 
             <section className="flex max-w-2xl flex-col gap-3">
                 <h1 className="text-balance font-heading font-semibold text-3xl tracking-tight sm:text-4xl">
-                    One codebase, running end to end.
+                    One codebase, from the page to the database.
                 </h1>
                 <p className="max-w-[58ch] text-pretty text-muted-foreground leading-relaxed">
                     When this page opened, it asked your API whether the
@@ -209,6 +207,12 @@ function LineMap() {
                             <StationRow
                                 key={station.name}
                                 station={station}
+                                recovery={
+                                    recovery !== null &&
+                                    recovery.part === station.checks
+                                        ? recovery
+                                        : null
+                                }
                                 stretch={
                                     <Stretch
                                         index={index}
@@ -240,15 +244,6 @@ function LineMap() {
                             />
                         ))}
                     </ol>
-
-                    {recovery !== null && (
-                        <p
-                            role="alert"
-                            className="rounded-lg bg-destructive/10 px-4 py-3 text-pretty text-destructive text-sm"
-                        >
-                            {recovery}
-                        </p>
-                    )}
                 </section>
 
                 <NextStops />
@@ -260,14 +255,15 @@ function LineMap() {
 }
 
 // Where the check stopped, as the first stretch of line it couldn't run: the
-// one into the database when the API couldn't reach it, everything past the
-// website when the API didn't answer, and none when it all answered
+// whole run from the API to the database when the API couldn't reach it
+// (the branch to Storage stays as it is), everything past the website when
+// the API didn't answer, and none when it all answered
 function brokenFrom(health: Health): number {
     switch (health.state) {
         case "database-down":
-            return STRETCHES_TO_THE_DATABASE - 1
+            return API_POSITION
         case "unreachable":
-            return 1
+            return API_POSITION - 1
         case "checking":
         case "up":
             return Number.POSITIVE_INFINITY
@@ -320,12 +316,18 @@ function Stretch({
     )
 }
 
+// One stop: its dot on the line, its name and what it's made with, what it
+// found, and what it's for. Its status sits beside its name when there's
+// room for both, and under it when there isn't. The stop a failed check was
+// about says how to fix it, right under it.
 function StationRow({
     station,
-    stretch
+    stretch,
+    recovery = null
 }: {
     station: Station
     stretch: ReactNode
+    recovery?: Recovery | null
 }) {
     const branch = station.shape === "branch"
     return (
@@ -338,7 +340,7 @@ function StationRow({
             )}
         >
             {stretch}
-            <StationDot shape={station.shape} />
+            <StationDot shape={station.shape} tone={station.status?.tone} />
             {branch && (
                 <span
                     aria-hidden
@@ -351,7 +353,7 @@ function StationRow({
                     branch ? "col-start-3" : "col-start-2"
                 )}
             >
-                <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                <div className="flex flex-col gap-1 @lg:flex-row @lg:flex-wrap @lg:items-baseline @lg:justify-between @lg:gap-x-6">
                     <h3
                         className={cn(
                             "font-heading font-semibold tracking-tight",
@@ -370,11 +372,6 @@ function StationRow({
                     {station.status !== undefined && (
                         <StatusLine status={station.status} />
                     )}
-                    {station.shape === "planned" && (
-                        <span className="rounded-full border border-dashed px-2 py-0.5 text-muted-foreground text-xs">
-                            Planned
-                        </span>
-                    )}
                 </div>
                 <p className="text-pretty text-muted-foreground text-sm">
                     {station.what}
@@ -384,22 +381,40 @@ function StationRow({
                         {station.path}
                     </code>
                 )}
+                {recovery !== null && (
+                    <RecoveryNote recovery={recovery} className="mt-3" />
+                )}
             </div>
         </li>
     )
 }
 
-// A stop is a ring on the line, the origin a filled dot, a branch a smaller
-// ring off it, and a stop still to come a dashed ring
-function StationDot({ shape }: { shape: Station["shape"] }) {
+// A stop is a ring on the line, filled once the check has passed through
+// it and red where it couldn't; the origin is a filled dot, a branch a
+// smaller ring off the line, and a stop still to come a dashed ring
+function StationDot({
+    shape,
+    tone
+}: {
+    shape: Station["shape"]
+    tone: Tone | undefined
+}) {
+    let stop: string
+    if (tone === "ok") {
+        stop = "border-primary bg-primary"
+    } else if (tone === "problem") {
+        stop = "border-destructive bg-background"
+    } else {
+        stop = "border-primary bg-background"
+    }
     return (
         <span
             aria-hidden
             className={cn(
-                "relative z-10 row-start-1 justify-self-center rounded-full",
+                "relative z-10 row-start-1 justify-self-center rounded-full transition-colors duration-200",
                 shape === "origin" && "col-start-1 mt-1 size-4 bg-primary",
                 shape === "stop" &&
-                    "col-start-1 mt-1 size-4 border-[3px] border-primary bg-background",
+                    cn("col-start-1 mt-1 size-4 border-[3px]", stop),
                 shape === "branch" &&
                     "col-start-2 mt-1.5 size-3 border-[2.5px] border-primary/60 bg-background",
                 shape === "planned" &&

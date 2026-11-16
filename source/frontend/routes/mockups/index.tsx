@@ -13,7 +13,7 @@ const DIRECTIONS = [
         to: "/mockups/manifest",
         letter: "A",
         name: "Manifest",
-        idea: "What's in the box as a packing list: each part, what it's for in plain words, where it lives, and a last column the page checks off live from the one health check (the API's measured round trip, the database connected). The planned parts sit underneath as planned, not as promises.",
+        idea: "What's in the box as a packing list: each part, what it's for in plain words, where it lives, and a last column the page checks off live from the one health check (the API's measured round trip, the database connected). The planned parts sit underneath as planned, not as promises. When the check fails, what to tell Claude sits right under the part that failed.",
         restyled:
             "Safest. It's text on the background with hairlines, so any theme reads well, but the business's color only lands on the Copy button: after step 2 the owner barely sees their brand arrive.",
         survives:
@@ -25,7 +25,7 @@ const DIRECTIONS = [
         to: "/mockups/tree",
         letter: "B",
         name: "Tree",
-        idea: "The page is the codebase: an annotated tour of the files worth knowing, with the one drawing this page marked “You are here”, START-HERE marked “Read first”, health.ts answering live in place, and each file opening to say what it's for and what to ask Claude to change it.",
+        idea: "The page is the codebase: an annotated tour of the files worth knowing, with the one drawing this page marked “You are here”, START-HERE marked “Read first”, health.ts answering live in place, and each file opening to say what it's for and what to ask Claude to change it. The parts still to come are listed under the tree, not drawn in it, since they aren't on disk yet.",
         restyled:
             "Barely changes: the tree is mostly monospace names on a card. The serif and navy theme shows in the headline and one badge.",
         survives:
@@ -37,7 +37,7 @@ const DIRECTIONS = [
         to: "/mockups/line",
         letter: "C",
         name: "Line map",
-        idea: "The app as a transit line, a stop for each part: you, the website, the API with Storage on a branch, the database. On load, the real health check runs the line as a pulse, and each stop shows what it found once the pulse arrives. The parts still to come are stops under construction, on a dashed line. Next stops, beside it: make it yours, build what it needs, put it online.",
+        idea: "The app as a transit line, a stop for each part: you, the website, the API with Storage on a branch, the database. On load, the real health check runs the line as a pulse: each stop it passes through fills in, and where it can't get through, the line turns red and the stop says what to tell Claude. The parts still to come are stops under construction, on a dashed line. Next stops, beside it: make it yours, build what it needs, put it online.",
         restyled:
             "Shows it off: the line is drawn in the main color, so after step 2 the owner sees their color run through their own app. Radius and heading font carry through the stops and badges.",
         survives:

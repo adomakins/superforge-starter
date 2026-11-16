@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { cn } from "cn"
-import { ChevronRight, FileCode, FileText, Folder } from "lucide-react"
+import {
+    ChevronRight,
+    CircleDashed,
+    FileCode,
+    FileText,
+    Folder
+} from "lucide-react"
 import type { CSSProperties } from "react"
 import {
     BusinessMark,
@@ -8,6 +13,7 @@ import {
 } from "@/frontend/components/mockups/environment"
 import { Footer } from "@/frontend/components/mockups/footer"
 import { type Health, useHealth } from "@/frontend/components/mockups/health"
+import { PLANNED_PARTS } from "@/frontend/components/mockups/planned"
 import {
     PromptChip,
     SayToClaude
@@ -15,7 +21,10 @@ import {
 import {
     apiStatus,
     databaseStatus,
+    type Recovery,
+    RecoveryNote,
     recoveryFor,
+    type Status,
     StatusIcon,
     StatusLine
 } from "@/frontend/components/mockups/status"
@@ -39,7 +48,9 @@ type Entry = {
     note: string
     detail?: string
     ask?: string
-    mark?: "here" | "first" | "live" | "planned"
+    mark?: "here" | "first" | "live"
+    // Which part this is, when a failed check can be about it
+    checks?: Recovery["part"]
     open?: boolean
 }
 
@@ -93,13 +104,6 @@ const ENTRIES: Entry[] = [
         ask: "Set the site's title and description"
     },
     {
-        name: "dashboard/",
-        depth: 3,
-        kind: "folder",
-        note: "Who can sign in, and the work running in the background",
-        mark: "planned"
-    },
-    {
         name: "styles.css",
         depth: 2,
         kind: "file",
@@ -119,7 +123,8 @@ const ENTRIES: Entry[] = [
         name: "backend/",
         depth: 1,
         kind: "folder",
-        note: "The API, under /api"
+        note: "The API, under /api",
+        checks: "api"
     },
     {
         name: "index.ts",
@@ -133,22 +138,16 @@ const ENTRIES: Entry[] = [
         name: "health.ts",
         depth: 2,
         kind: "file",
-        note: "/api/health, the check this page just ran",
+        note: "/api/health, the check this page ran",
         detail: "Railway calls it before a new version takes traffic. It answers whether the server can reach the database.",
         mark: "live"
-    },
-    {
-        name: "workflows/",
-        depth: 2,
-        kind: "folder",
-        note: "Background work that picks up where it stopped, on DBOS",
-        mark: "planned"
     },
     {
         name: "database/",
         depth: 1,
         kind: "folder",
-        note: "Postgres, through Drizzle"
+        note: "Postgres, through Drizzle",
+        checks: "database"
     },
     {
         name: "schema.ts",
@@ -173,13 +172,6 @@ const ENTRIES: Entry[] = [
         note: "Your logo and favicon",
         detail: "Files served as they are, from the site's root.",
         ask: "Use our logo"
-    },
-    {
-        name: ".superforge/",
-        depth: 0,
-        kind: "folder",
-        note: "Your Superforge Infra project, for sign-in",
-        mark: "planned"
     },
     {
         name: ".railway/",
@@ -264,18 +256,57 @@ function Tree() {
                                 key={`${entry.depth}-${entry.name}`}
                                 entry={entry}
                                 health={health}
+                                recovery={
+                                    recovery !== null &&
+                                    recovery.part === entry.checks
+                                        ? recovery
+                                        : null
+                                }
                             />
                         ))}
                     </ul>
                 </div>
-                {recovery !== null && (
-                    <p
-                        role="alert"
-                        className="rounded-lg bg-destructive/10 px-4 py-3 text-pretty text-destructive text-sm"
+            </section>
+
+            <section aria-labelledby="coming" className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                    <h2
+                        id="coming"
+                        className="font-heading font-semibold text-lg tracking-tight"
                     >
-                        {recovery}
+                        Coming to Foundation
+                    </h2>
+                    <p className="text-muted-foreground text-sm">
+                        Not in the codebase yet. Each will arrive as an update,
+                        in the folder beside it.
                     </p>
-                )}
+                </div>
+                <ul className="flex flex-col gap-3">
+                    {PLANNED_PARTS.map((part) => (
+                        <li
+                            key={part.name}
+                            className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-3 text-sm"
+                        >
+                            <CircleDashed
+                                aria-hidden
+                                className="mt-0.5 size-4 text-muted-foreground/60"
+                            />
+                            <span className="flex flex-col gap-0.5">
+                                <span>
+                                    <span className="font-medium">
+                                        {part.name}
+                                    </span>{" "}
+                                    <span className="text-muted-foreground">
+                                        {part.whatInFull}
+                                    </span>
+                                </span>
+                                <code className="font-mono text-foreground/60 text-xs">
+                                    {part.path}
+                                </code>
+                            </span>
+                        </li>
+                    ))}
+                </ul>
             </section>
 
             <section className="flex flex-col gap-3">
@@ -295,8 +326,17 @@ function Tree() {
 
 // One file or folder: its icon and name at its depth, with the lines of the
 // folders it's in, its note, and its mark. One with more to say opens in
-// place to say it.
-function EntryRow({ entry, health }: { entry: Entry; health: Health }) {
+// place to say it. The part a failed check was about says how to fix it,
+// right under it.
+function EntryRow({
+    entry,
+    health,
+    recovery
+}: {
+    entry: Entry
+    health: Health
+    recovery: Recovery | null
+}) {
     const textStart = PADDING_REM + entry.depth * INDENT_REM
     const guides = Array.from({ length: entry.depth }, (_, level) => level)
     const expandable = entry.detail !== undefined
@@ -313,14 +353,7 @@ function EntryRow({ entry, health }: { entry: Entry; health: Health }) {
         >
             <span className="flex min-w-0 items-center gap-2">
                 <EntryIcon entry={entry} />
-                <span
-                    className={cn(
-                        "truncate font-mono text-sm",
-                        entry.mark === "planned" && "text-muted-foreground"
-                    )}
-                >
-                    {entry.name}
-                </span>
+                <span className="truncate font-mono text-sm">{entry.name}</span>
                 {expandable && (
                     <ChevronRight
                         aria-hidden
@@ -332,7 +365,11 @@ function EntryRow({ entry, health }: { entry: Entry; health: Health }) {
                 {entry.note}
             </span>
             <span className="col-start-2 row-start-1 flex justify-end @xl:col-start-3">
-                <EntryMark entry={entry} health={health} />
+                <EntryMark
+                    entry={entry}
+                    health={health}
+                    failed={recovery !== null}
+                />
             </span>
         </span>
     )
@@ -392,15 +429,20 @@ function EntryRow({ entry, health }: { entry: Entry; health: Health }) {
                     {line}
                 </div>
             )}
+            {recovery !== null && (
+                <div
+                    className="pt-1 pr-3 pb-3"
+                    style={{ paddingLeft: `${textStart + 1.5}rem` }}
+                >
+                    <RecoveryNote recovery={recovery} />
+                </div>
+            )}
         </li>
     )
 }
 
 function EntryIcon({ entry }: { entry: Entry }) {
-    const className = cn(
-        "size-4 shrink-0 text-muted-foreground",
-        entry.mark === "planned" && "opacity-50"
-    )
+    const className = "size-4 shrink-0 text-muted-foreground"
     if (entry.kind === "folder") {
         return <Folder aria-hidden className={className} />
     } else if (entry.name.endsWith(".md")) {
@@ -410,7 +452,23 @@ function EntryIcon({ entry }: { entry: Entry }) {
     }
 }
 
-function EntryMark({ entry, health }: { entry: Entry; health: Health }) {
+function EntryMark({
+    entry,
+    health,
+    failed
+}: {
+    entry: Entry
+    health: Health
+    failed: boolean
+}) {
+    if (failed) {
+        return (
+            <span className="flex items-center gap-1.5 whitespace-nowrap font-medium text-destructive text-xs">
+                <StatusIcon tone="problem" className="size-3.5" />
+                Not answering
+            </span>
+        )
+    }
     switch (entry.mark) {
         case "here":
             return (
@@ -425,22 +483,30 @@ function EntryMark({ entry, health }: { entry: Entry; health: Health }) {
                 </span>
             )
         case "live": {
-            const status = databaseStatus(health)
-            const api = apiStatus(health)
+            const status = healthMark(health)
             return (
                 <span className="flex items-center gap-1.5 whitespace-nowrap text-xs tabular-nums">
                     <StatusIcon tone={status.tone} className="size-3.5" />
-                    {status.tone === "ok" ? api.label : status.label}
+                    {status.label}
                 </span>
             )
         }
-        case "planned":
-            return (
-                <span className="whitespace-nowrap rounded-full border border-dashed px-2 py-0.5 text-muted-foreground text-xs">
-                    Planned
-                </span>
-            )
         case undefined:
             return null
+    }
+}
+
+// What the health check's own file says it found, in words that make sense
+// on a file: what it answered, not which part broke
+function healthMark(health: Health): Status {
+    switch (health.state) {
+        case "checking":
+            return { tone: "checking", label: "Checking…" }
+        case "up":
+            return apiStatus(health)
+        case "database-down":
+            return { tone: "problem", label: "Can't reach the database" }
+        case "unreachable":
+            return { tone: "problem", label: "No answer" }
     }
 }

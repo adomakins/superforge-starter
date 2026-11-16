@@ -61,8 +61,12 @@ export function useHealth() {
         }
     }
 
+    // When the last check finished, answered or not, or null before one has
+    const finishedAt = Math.max(query.dataUpdatedAt, query.errorUpdatedAt)
+
     return {
         health,
+        checkedAt: finishedAt === 0 ? null : new Date(finishedAt),
         checking: query.isFetching,
         checkAgain: () => {
             void query.refetch()

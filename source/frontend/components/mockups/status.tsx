@@ -10,6 +10,7 @@ import {
 import type { ReactNode } from "react"
 import { IN_DEVELOPMENT } from "./environment"
 import type { Health } from "./health"
+import { PromptChip } from "./say-to-claude"
 
 /**
  * How sure the page is about a part: seen working, being checked, broken,
@@ -161,21 +162,72 @@ export function deployStatus(): Status {
 }
 
 /**
- * What to do when the check failed, in plain words, or nothing when it
- * didn't. A dev server and a build have different recoveries.
+ * What went wrong when the check failed, the sentence to tell Claude about
+ * it, and what else would fix it; nothing when it didn't fail. A dev server
+ * and a build have different recoveries. `part` is which part failed, so a
+ * page can show it under that part.
  */
-export function recoveryFor(health: Health): string | null {
+export type Recovery = {
+    part: "api" | "database"
+    problem: string
+    prompt: string
+    otherwise: string
+}
+
+export function recoveryFor(health: Health): Recovery | null {
     switch (health.state) {
         case "checking":
         case "up":
             return null
         case "database-down":
-            return IN_DEVELOPMENT
-                ? "The database isn't answering. Stop the dev server and run pnpm dev again, which starts it, or tell Claude “the database is down”."
-                : "The database isn't answering. Railway's dashboard shows whether Postgres is running."
+            return {
+                part: "database",
+                problem: "The database isn't answering.",
+                prompt: IN_DEVELOPMENT
+                    ? "The database is down"
+                    : "The database is down on Railway",
+                otherwise: IN_DEVELOPMENT
+                    ? "Or restart the dev server: stop it, then run pnpm dev, which starts the database too."
+                    : "Or look in Railway's dashboard, which shows whether Postgres is running."
+            }
         case "unreachable":
-            return IN_DEVELOPMENT
-                ? "The server didn't answer. Is pnpm dev still running? Start it again, or tell Claude “the dev server stopped”."
-                : "The server didn't answer. Railway's deploy logs say why."
+            return {
+                part: "api",
+                problem: "The server didn't answer.",
+                prompt: IN_DEVELOPMENT
+                    ? "The dev server stopped"
+                    : "The site is down on Railway",
+                otherwise: IN_DEVELOPMENT
+                    ? "Or start it again yourself with pnpm dev."
+                    : "Or look in Railway's deploy logs, which say why."
+            }
     }
+}
+
+/** What went wrong and how to fix it, to sit under the part that failed. */
+export function RecoveryNote({
+    recovery,
+    className
+}: {
+    recovery: Recovery
+    className?: string
+}) {
+    return (
+        <div
+            role="alert"
+            className={cn(
+                "flex flex-col gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm",
+                className
+            )}
+        >
+            <p className="font-medium text-destructive">{recovery.problem}</p>
+            <p className="flex flex-wrap items-center gap-2">
+                <span>Tell Claude</span>
+                <PromptChip prompt={recovery.prompt} />
+            </p>
+            <p className="text-pretty text-muted-foreground text-xs">
+                {recovery.otherwise}
+            </p>
+        </div>
+    )
 }
