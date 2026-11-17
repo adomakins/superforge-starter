@@ -27,6 +27,24 @@ export function visitorIp(context: Context) {
     }
 }
 
+// The longest browser description kept with a session: a real one is a few
+// hundred characters, and anything longer is someone padding it
+const LONGEST_BROWSER = 512
+
+/**
+ * The browser, as it describes itself (`User-Agent`), kept with its
+ * session so the account page can say where someone is signed in. Only
+ * ever shown back to its own user, so it's kept as it came, shortened.
+ */
+export function visitorBrowser(context: Context) {
+    const described = context.req.header("User-Agent")?.trim()
+    if (described === undefined || described === "") {
+        return null
+    } else {
+        return described.slice(0, LONGEST_BROWSER)
+    }
+}
+
 /**
  * Where the app is, for the link in the sign-in email: the request's own
  * origin. Infra builds the link only for a domain the project lists, or

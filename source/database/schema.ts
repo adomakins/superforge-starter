@@ -33,25 +33,55 @@
 //   - `dbos`: DBOS's own tables, the workflows' runs and their steps
 //     (backend/workflows/), which it makes and migrates itself. Nothing
 //     here writes to it, and it isn't declared below.
-import { index, pgSchema, pgTable, text, uuid } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
+import {
+    check,
+    index,
+    pgSchema,
+    pgTable,
+    text,
+    uuid
+} from "drizzle-orm/pg-core"
+// Relative, since drizzle-kit reads this file without the app's `@/` paths
+import { ROLES } from "../utilities/schemas/users"
 import { id, timestamp } from "./columns"
 
 export const auth = pgSchema("auth")
 export const internal = pgSchema("internal")
 
-// The business's customers and staff, everyone who can sign in: signing in
-// for the first time makes the row (backend/auth/sign-in.ts). Infra proves
+// The business's own people and everyone it serves, everyone who can sign
+// in: signing in for the first time makes the row (backend/auth/sign-in.ts),
+// unless an internal person added them first (backend/users/). Infra proves
 // the address is theirs, and keeps nothing of them.
-export const users = pgTable("users", {
-    id: id(),
-    // Trimmed and lowercased as it comes in, so the unique constraint
-    // catches case variants
-    email: text().notNull().unique(),
-    // When they last signed in, or null for someone who never has, like a
-    // user added by hand before they do
-    signed_in_at: timestamp(),
-    created_at: timestamp().notNull().defaultNow()
-})
+export const users = pgTable(
+    "users",
+    {
+        id: id(),
+        // Trimmed and lowercased as it comes in, so the unique constraint
+        // catches case variants
+        email: text().notNull().unique(),
+        // What they'd like to be called, which they set on their account
+        name: text(),
+        // Who they are to the business, which decides what of the dashboard
+        // they see (utilities/schemas/users.ts has the roles): text with a
+        // check rather than a Postgres enum, since a role added to an enum
+        // can't be used in the transaction that adds it, and a deploy
+        // applies every pending migration in one
+        role: text({ enum: ROLES }).notNull().default("external"),
+        // When they last signed in, or null for someone who never has, like
+        // a user added by hand before they do
+        signed_in_at: timestamp(),
+        created_at: timestamp().notNull().defaultNow()
+    },
+    (table) => [
+        check(
+            "users_role_check",
+            sql.raw(
+                `"${table.role.name}" in (${ROLES.map((role) => `'${role}'`).join(", ")})`
+            )
+        )
+    ]
+)
 
 // A browser's sign-in, which its `session` cookie holds the token for
 // (backend/auth/sessions.ts). Only the token's SHA-256 is kept. It lasts 30
@@ -63,6 +93,9 @@ export const sessions = auth.table(
         user_id: uuid()
             .notNull()
             .references(() => users.id, { onDelete: "cascade" }),
+        // The browser it's in, as it said (its User-Agent), so the account
+        // page can say where someone is signed in
+        user_agent: text(),
         expires_at: timestamp().notNull(),
         created_at: timestamp().notNull().defaultNow()
     },

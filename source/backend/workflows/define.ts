@@ -5,6 +5,7 @@ import type { Storage } from "@/database/storage"
 import { MINUTE } from "@/utilities/primitives/durations"
 import { workflowsProcess } from "./process"
 import type { QueueName } from "./queues"
+import type { Run, RunWithSteps } from "./runs"
 
 /**
  * A workflow: work that runs in the background, outside any request, and
@@ -20,6 +21,9 @@ export type Workflow<Input = unknown> = {
     queue: QueueName
     // What it's started with, checked as each run starts
     input: z.ZodType<Input>
+    // What a run of it is called on the dashboard, from what it was started
+    // with as DBOS kept it, or null when that no longer fits the workflow
+    title: (stored: unknown) => string | null
 }
 
 /** What a workflow's body runs with. */
@@ -38,7 +42,11 @@ export type WorkflowContext = {
     ) => Promise<Result>
 }
 
-/** How a route starts workflows: `context.var.workflows` (engine.ts's). */
+/**
+ * How a route starts workflows, and reads and retries their runs:
+ * `context.var.workflows` (engine.ts's, through DBOS's own functions, never
+ * its tables).
+ */
 export type Workflows = {
     /**
      * Puts a run of `workflow` on its queue, and answers its id. Starting
@@ -51,6 +59,16 @@ export type Workflows = {
         input: Input,
         options?: { id?: string }
     ): Promise<string>
+    /** The latest runs, newest first, of every workflow. */
+    runs(options?: { limit?: number }): Promise<Run[]>
+    /** One run, with what it returned and each step it has finished. */
+    run(id: string): Promise<RunWithSteps | null>
+    /**
+     * Runs a failed or canceled run again under its id, from the step it
+     * stopped at: the steps before it keep what they returned, and aren't
+     * run again.
+     */
+    retry(id: string): AsyncOperation<null, "not-found" | "not-stopped">
 }
 
 // How a step is tried: again after 10 seconds when it throws, then twice as
@@ -76,9 +94,12 @@ export function defineWorkflow<Input, Output>(definition: {
     name: string
     queue?: QueueName
     input: z.ZodType<Input>
+    // What a run is called on the dashboard, like "Tell the team about
+    // ada@example.com"; the workflow's name when it has none
+    title?: (input: Input) => string
     run: (input: Input, context: WorkflowContext) => Promise<Output>
 }): Workflow<Input> {
-    const { name, input, run } = definition
+    const { name, input, run, title } = definition
 
     // Whichever evaluation of the feature's module came last is what runs.
     // A run's input was stored by whatever version started it, so it's
@@ -96,7 +117,21 @@ export function defineWorkflow<Input, Output>(definition: {
             return await run(parsed.data, context)
         }
     })
-    return { name, queue: definition.queue ?? "background", input }
+    return {
+        name,
+        queue: definition.queue ?? "background",
+        input,
+        title: (stored) => {
+            const parsed = input.safeParse(stored)
+            if (!parsed.success) {
+                return null
+            } else if (title === undefined) {
+                return name
+            } else {
+                return title(parsed.data)
+            }
+        }
+    }
 }
 
 /**

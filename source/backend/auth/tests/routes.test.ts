@@ -3,6 +3,7 @@ import { Hono } from "hono"
 import { expect, onTestFinished, test, vi } from "vitest"
 import type { ApiEnvironment } from "@/backend/context"
 import type { Infra } from "@/backend/infra"
+import { standInInfra } from "@/backend/infra/stand-in"
 import { testApi } from "@/backend/tests/support/api"
 import type { Database } from "@/database"
 import { sessions, users } from "@/database/schema"
@@ -338,4 +339,89 @@ test("signedIn lets a live session through with its user, and answers 401 withou
     expect(api_failure.parse(await refused.json()).error.reason).toBe(
         "signed-out"
     )
+})
+
+test("someone new is external, and their sign-up starts the notice to the team, once", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const api = await testApi()
+    for (let time = 0; time < 2; time++) {
+        const { code } = await emailed(api.client)
+        await api.client.api.auth.verify.$post({ json: { email: EMAIL, code } })
+    }
+    const [user] = await api.database.select().from(users)
+    expect(user?.role).toBe("external")
+    expect(api.started).toEqual([
+        {
+            workflow: "tell-team-of-sign-up",
+            input: { user_id: user?.id, email: EMAIL },
+            id: `tell-team-of-sign-up-${user?.id}`
+        }
+    ])
+})
+
+test("an address listed as internal is internal from its first sign-in, and the session says so", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const api = await testApi({
+        access: { sign_in: "anyone", internal_emails: ["Ada@Example.com"] }
+    })
+    const { code } = await emailed(api.client)
+    const verified = await api.client.api.auth.verify.$post(
+        { json: { email: EMAIL, code } },
+        { headers: { "User-Agent": "Test browser" } }
+    )
+    expect(verified.status).toBe(200)
+    if (verified.status === 200) {
+        expect((await verified.json()).user).toMatchObject({
+            email: EMAIL,
+            name: null,
+            role: "internal"
+        })
+    }
+    const [session] = await api.database.select().from(sessions)
+    expect(session?.user_agent).toBe("Test browser")
+})
+
+test("when only listed people may sign in, anyone else is refused before Infra is asked", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const asked: string[] = []
+    const stand_in = standInInfra()
+    const api = await testApi({
+        access: { sign_in: "listed", internal_emails: [EMAIL] },
+        infra: {
+            startSignIn: async (request) => {
+                asked.push(request.email)
+                return await stand_in.startSignIn(request)
+            },
+            verifySignIn: (proof) => stand_in.verifySignIn(proof)
+        }
+    })
+
+    const stranger = await api.client.api.auth.start.$post({
+        json: { email: "stranger@example.com" }
+    })
+    expect(stranger.status).toBe(403)
+    expect(api_failure.parse(await stranger.json()).error.reason).toBe(
+        "not-listed"
+    )
+    expect(asked).toEqual([])
+
+    // The owner, listed as internal, signs in and is made
+    const { code } = await emailed(api.client)
+    const owner = await api.client.api.auth.verify.$post({
+        json: { email: EMAIL, code }
+    })
+    expect(owner.status).toBe(200)
+
+    // Someone they add can sign in too, as what they were added as
+    await api.database
+        .insert(users)
+        .values({ email: "grace@example.com", role: "external" })
+    const added = await emailed(api.client, "grace@example.com")
+    const verified = await api.client.api.auth.verify.$post({
+        json: { email: "grace@example.com", code: added.code }
+    })
+    expect(verified.status).toBe(200)
+    expect(asked).toEqual([EMAIL, "grace@example.com"])
+    // Neither joined by signing in, so no notice went out
+    expect(api.started).toHaveLength(1)
 })

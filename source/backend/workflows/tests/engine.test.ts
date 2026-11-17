@@ -64,11 +64,37 @@ const twoSteps = defineWorkflow({
     }
 })
 
+// Runs that fail between their two steps the first time, the way a body
+// that throws outside a step fails a run at once, with no retries
+const failing = new Set<string>()
+
+const breaksOnce = defineWorkflow({
+    name: "breaks-once",
+    input: z.object({ run: z.string() }),
+    title: ({ run }) => `Break ${run}`,
+    run: async ({ run }, context) => {
+        const counts = ran.get(run) ?? { first: 0, second: 0 }
+        ran.set(run, counts)
+        await context.step("first", async () => {
+            counts.first += 1
+            return { run }
+        })
+        if (failing.has(run)) {
+            throw new Error(`${run} broke`)
+        }
+        await context.step("second", async () => {
+            counts.second += 1
+            return { done: true }
+        })
+        return "fixed"
+    }
+})
+
 const dependencies: WorkflowDependencies = {
     database,
     storage: new Storage(memoryStore().store),
     database_url: url,
-    workflows: [twoSteps],
+    workflows: [twoSteps, breaksOnce],
     // This machine's Postgres is every checkout's
     dbos_pool_size: 4
 }
@@ -155,6 +181,52 @@ describe("the workflows on DBOS", { timeout: 60_000 }, () => {
             "second of restarted"
         ])
         expect(ran.get("restarted")).toEqual({ first: 1, second: 2 })
+    })
+
+    test("read runs and their steps through DBOS, and run a failed one again from where it stopped", async () => {
+        failing.add("broken")
+        const id = await dbosWorkflows.start(breaksOnce, { run: "broken" })
+        await expect(DBOS.retrieveWorkflow(id).getResult()).rejects.toThrow(
+            "broken broke"
+        )
+
+        const runs = await dbosWorkflows.runs()
+        const listed = runs.find((run) => run.id === id)
+        expect(listed).toMatchObject({
+            workflow: "breaks-once",
+            title: "Break broken",
+            status: "failed",
+            error: "broken broke"
+        })
+        expect(runs.filter((run) => run.status === "succeeded")).not.toEqual([])
+
+        const failed = await dbosWorkflows.run(id)
+        expect(failed?.steps.map((step) => [step.name, step.status])).toEqual([
+            ["first", "done"]
+        ])
+
+        // Fixed, it runs again from just after its first step, which keeps
+        // what it returned and doesn't run again
+        failing.delete("broken")
+        expect(await dbosWorkflows.retry(id)).toEqual({ ok: true, data: null })
+        expect(await DBOS.retrieveWorkflow(id).getResult()).toBe("fixed")
+        expect(ran.get("broken")).toEqual({ first: 1, second: 1 })
+        const fixed = await dbosWorkflows.run(id)
+        expect(fixed?.status).toBe("succeeded")
+        expect(fixed?.steps.map((step) => step.name)).toEqual([
+            "first",
+            "second"
+        ])
+
+        // One that didn't fail, or isn't there, doesn't run again
+        expect(await dbosWorkflows.retry(id)).toEqual({
+            ok: false,
+            error: "not-stopped"
+        })
+        expect(await dbosWorkflows.retry("no-such-run")).toEqual({
+            ok: false,
+            error: "not-found"
+        })
     })
 
     test("prune finished runs, steps and all", async () => {

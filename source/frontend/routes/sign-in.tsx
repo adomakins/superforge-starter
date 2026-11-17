@@ -1,7 +1,8 @@
 import { useMutation } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
-import { Button } from "@/frontend/components/primitives/button"
+import { Button, buttonVariants } from "@/frontend/components/primitives/button"
+import { BusinessMark } from "@/frontend/components/site/business-mark"
 import {
     SignInForm,
     whatWentWrong
@@ -18,8 +19,6 @@ export const Route = createFileRoute("/sign-in")({
 
 const heading =
     "text-balance font-heading font-semibold text-3xl tracking-tight"
-const textLink =
-    "text-sm underline decoration-foreground/40 underline-offset-4 hover:decoration-foreground"
 
 /**
  * Where customers and staff sign in, and where the email's link lands, as
@@ -28,7 +27,8 @@ const textLink =
  * the visitor presses "Finish signing in", never as the page loads: a mail
  * scanner that opens the link, even one that runs the page's script, spends
  * nothing, and a link someone else sent can't sign this browser in without
- * a press. The screens behind sign-in will go under /dashboard.
+ * a press. Once someone's in, the screens behind sign-in are under
+ * /dashboard (routes/dashboard/).
  */
 function SignInPage() {
     const session = useSession()
@@ -70,13 +70,7 @@ function SignInPage() {
     return (
         <main className="mx-auto flex min-h-screen max-w-md flex-col gap-10 px-5 py-6 sm:py-10">
             <header>
-                <Link
-                    to="/"
-                    className="flex w-fit items-center gap-2.5 rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                    <img src="/favicon.svg" alt="" className="size-5" />
-                    <span className="font-medium text-sm">Your business</span>
-                </Link>
+                <BusinessMark />
             </header>
 
             <section className="flex flex-col gap-6 sm:mt-10">
@@ -113,6 +107,14 @@ function SignInPage() {
                         </div>
                         <Problem text={problem} />
                         <div className="flex flex-wrap items-center gap-3">
+                            <Link
+                                to="/dashboard"
+                                className={buttonVariants({
+                                    className: "h-10 px-4"
+                                })}
+                            >
+                                Go to your dashboard
+                            </Link>
                             <Button
                                 variant="outline"
                                 disabled={leave.isPending}
@@ -121,9 +123,6 @@ function SignInPage() {
                             >
                                 {leave.isPending ? "Signing out…" : "Sign out"}
                             </Button>
-                            <Link to="/" className={textLink}>
-                                Back to the home page
-                            </Link>
                         </div>
                     </>
                 ) : (

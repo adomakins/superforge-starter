@@ -8,9 +8,9 @@
 //      empty database of its own on this checkout's Postgres
 //   2. `pnpm start` (source/node.ts) on a free port, with DATABASE_URL
 //   3. /api/health, which Railway's healthcheck waits on, answers 200
-//   4. every prerendered page answers 200, the build's hashed files and
-//      /api answer with the cache headers source/node.ts promises, and a
-//      path that isn't a page answers 404
+//   4. every prerendered page answers 200, the build's hashed files, /api
+//      and the dashboard, drawn on request, answer with the cache headers
+//      source/node.ts promises, and a path that isn't a page answers 404
 //   5. its workflows launched: DBOS registers the app's queues in its own
 //      tables once it has (source/backend/workflows/engine.ts)
 //   6. with no INFRA_SECRET_KEY, sign-in answers 503, never the stand-in a
@@ -87,6 +87,9 @@ try {
         await expectAnswer(base, `/assets/${asset}`, 200, "immutable")
     }
     await expectAnswer(base, "/api/health", 200, "no-store")
+    // The dashboard, which isn't prerendered: drawn on request, for the
+    // browser to fill in, and never kept by the CDN
+    await expectAnswer(base, "/dashboard/workflows", 200, "no-store")
     await expectAnswer(base, "/no-page-here", 404, "no-store")
 
     // 5. The workflows, which launch once the server is listening

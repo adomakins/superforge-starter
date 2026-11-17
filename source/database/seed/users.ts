@@ -1,20 +1,66 @@
 import { createHash } from "node:crypto"
-import { inArray } from "drizzle-orm"
+import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import type { Database } from "@/database"
 import { sessions, users } from "@/database/schema"
 import { fromNow } from "@/database/time"
-import { DAY } from "@/utilities/primitives/durations"
+import { DAY, HOUR } from "@/utilities/primitives/durations"
 import type { Seeder } from "./seed"
 
-// Sample users and their sessions: one signed in now, one whose session has
-// run out, and one who's never signed in, like someone added by hand before
-// they do. Their addresses are example.com's, which reach nobody.
+// Sample users and their sessions: two of the business's own, one signed in
+// now and one whose session has run out, and customers who've signed up
+// over the last few days, one with no name and one added by hand who's
+// never signed in. Their addresses are example.com's, which reach nobody.
 
 const SAMPLE_USERS = [
-    { email: "ada@example.com", signed_in_at: fromNow(-2 * DAY) },
-    { email: "grace@example.com", signed_in_at: fromNow(-45 * DAY) },
-    { email: "linus@example.com", signed_in_at: null }
+    {
+        email: "ada@example.com",
+        name: "Ada Lovelace",
+        role: "internal" as const,
+        signed_in_at: fromNow(-2 * DAY),
+        created_at: fromNow(-94 * DAY)
+    },
+    {
+        email: "grace@example.com",
+        name: "Grace Hopper",
+        role: "internal" as const,
+        signed_in_at: fromNow(-45 * DAY),
+        created_at: fromNow(-91 * DAY)
+    },
+    {
+        email: "maria.santos@example.com",
+        name: "Maria Santos",
+        role: "external" as const,
+        signed_in_at: fromNow(-2 * HOUR),
+        created_at: fromNow(-2 * HOUR)
+    },
+    {
+        email: "jun.park@example.com",
+        name: "Jun Park",
+        role: "external" as const,
+        signed_in_at: fromNow(-5 * HOUR),
+        created_at: fromNow(-19 * HOUR)
+    },
+    {
+        email: "olu.adeyemi@example.com",
+        name: null,
+        role: "external" as const,
+        signed_in_at: fromNow(-26 * HOUR),
+        created_at: fromNow(-26 * HOUR)
+    },
+    {
+        email: "linus@example.com",
+        name: null,
+        role: "external" as const,
+        signed_in_at: null,
+        created_at: fromNow(-40 * DAY)
+    }
 ]
+
+// What the browsers said of themselves
+const CHROME_ON_A_MAC =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+const SAFARI_ON_AN_IPHONE =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1"
 
 // Each session by its user, with the token its cookie would hold: its
 // SHA-256 is what's kept, as a real session's is (backend/auth/tokens.ts)
@@ -22,12 +68,30 @@ const SAMPLE_SESSIONS = [
     {
         email: "ada@example.com",
         token: "sample-session-ada",
+        user_agent: CHROME_ON_A_MAC,
+        created_at: fromNow(-12 * DAY),
         expires_at: fromNow(28 * DAY)
+    },
+    {
+        email: "ada@example.com",
+        token: "sample-session-ada-phone",
+        user_agent: SAFARI_ON_AN_IPHONE,
+        created_at: fromNow(-31 * DAY),
+        expires_at: fromNow(20 * DAY)
     },
     {
         email: "grace@example.com",
         token: "sample-session-grace",
+        user_agent: null,
+        created_at: fromNow(-60 * DAY),
         expires_at: fromNow(-15 * DAY)
+    },
+    {
+        email: "maria.santos@example.com",
+        token: "sample-session-maria",
+        user_agent: SAFARI_ON_AN_IPHONE,
+        created_at: fromNow(-2 * HOUR),
+        expires_at: fromNow(30 * DAY - 2 * HOUR)
     }
 ]
 
@@ -39,6 +103,19 @@ export const seedUsers: Seeder = async (transaction: Database) => {
         .values(SAMPLE_USERS)
         .returning({ id: users.id })
     return { table: "users", rows: rows.length }
+}
+
+/**
+ * The customers who signed up themselves, whose sign-ups each start the
+ * workflow that tells the team (backend/users/workflows.ts): what the seed
+ * starts real runs of, rather than writing DBOS's rows.
+ */
+export async function signedUp(database: Database) {
+    const rows = await database
+        .select({ id: users.id, email: users.email })
+        .from(users)
+        .where(and(eq(users.role, "external"), isNotNull(users.signed_in_at)))
+    return rows
 }
 
 /** Their sessions, in place of every session there was. */
@@ -63,6 +140,8 @@ export const seedSessions: Seeder = async (transaction: Database) => {
                 .update(session.token)
                 .digest("hex"),
             user_id: owner.id,
+            user_agent: session.user_agent,
+            created_at: session.created_at,
             expires_at: session.expires_at
         }
     })

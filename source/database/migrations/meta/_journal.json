@@ -15,6 +15,13 @@
             "when": 1794800086967,
             "tag": "0001_users-and-sessions",
             "breakpoints": true
+        },
+        {
+            "idx": 2,
+            "version": "7",
+            "when": 1794866223789,
+            "tag": "0002_roles-names-and-browsers",
+            "breakpoints": true
         }
     ]
 }

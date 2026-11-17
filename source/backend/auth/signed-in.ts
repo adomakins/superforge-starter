@@ -2,6 +2,7 @@ import type { Context } from "hono"
 import { deleteCookie, getCookie, setCookie } from "hono/cookie"
 import { createFactory } from "hono/factory"
 import type { Database } from "@/database"
+import { isInternal } from "@/utilities/schemas/users"
 import type { ApiEnvironment } from "../context"
 import { failure } from "../failures"
 import {
@@ -13,8 +14,8 @@ import {
 
 // Who's signed in: the `session` cookie, and the middleware that reads it.
 // This is the one place that decides who's signed in, so a route that
-// needs the user takes `signedIn` (or `maybeSignedIn`) and reads
-// `context.var.user`; nothing else reads the cookie.
+// needs the user takes `signedIn` (or `maybeSignedIn`, or `internalOnly`)
+// and reads `context.var.user`; nothing else reads the cookie.
 
 const COOKIE = "session"
 
@@ -58,35 +59,82 @@ function secureCookie(request_url: string) {
     return !(protocol === "http:" && (local || import.meta.env.DEV))
 }
 
+/** The session a request came with, as a route behind `signedIn` sees it. */
+export type RequestSession = { id: string }
+
+type SignedIn = {
+    Variables: ApiEnvironment["Variables"] & {
+        user: SessionUser
+        session: RequestSession
+    }
+}
+
 /**
  * Lets a request through only with a live session, and puts its user on
- * `context.var.user`; without one, it's answered 401 `signed-out`. It also
- * renews the session, keeping the same token, so coming back keeps someone
- * signed in. One that has ended stays ended.
+ * `context.var.user`, and the session's id on `context.var.session`;
+ * without one, it's answered 401 `signed-out`. It also renews the session,
+ * keeping the same token, so coming back keeps someone signed in. One that
+ * has ended stays ended.
  */
-export const signedIn = createFactory<{
-    Variables: ApiEnvironment["Variables"] & { user: SessionUser }
+export const signedIn = createFactory<SignedIn>().createMiddleware(
     // From a factory rather than plain `createMiddleware`, so the 401 below
     // is inferred into each route's type and the typed client knows it
-}>().createMiddleware(async (context, next) => {
-    const token = sessionToken(context)
-    const session =
-        token === undefined
-            ? undefined
-            : await liveSession(context.var.database, token)
-    if (token === undefined || session === undefined) {
-        return failure(context, 401, "signed-out", "Sign in first")
-    } else {
-        context.set("user", session.user)
-        await renewed(
-            context,
-            context.var.database,
-            token,
-            session.renewable,
-            next
-        )
+    async (context, next) => {
+        const token = sessionToken(context)
+        const session =
+            token === undefined
+                ? undefined
+                : await liveSession(context.var.database, token)
+        if (token === undefined || session === undefined) {
+            return failure(context, 401, "signed-out", "Sign in first")
+        } else {
+            context.set("user", session.user)
+            context.set("session", { id: session.id })
+            await renewed(
+                context,
+                context.var.database,
+                token,
+                session.renewable,
+                next
+            )
+        }
     }
-})
+)
+
+/**
+ * `signedIn` for the business's side of the dashboard: only someone whose
+ * role is one of its own (`isInternal`, utilities/schemas/users.ts) gets
+ * through, and anyone else signed in is answered 403 `not-internal`.
+ */
+export const internalOnly = createFactory<SignedIn>().createMiddleware(
+    async (context, next) => {
+        const token = sessionToken(context)
+        const session =
+            token === undefined
+                ? undefined
+                : await liveSession(context.var.database, token)
+        if (token === undefined || session === undefined) {
+            return failure(context, 401, "signed-out", "Sign in first")
+        } else if (!isInternal(session.user.role)) {
+            return failure(
+                context,
+                403,
+                "not-internal",
+                "Only the business's own people can see this"
+            )
+        } else {
+            context.set("user", session.user)
+            context.set("session", { id: session.id })
+            await renewed(
+                context,
+                context.var.database,
+                token,
+                session.renewable,
+                next
+            )
+        }
+    }
+)
 
 /**
  * `signedIn` for a route anyone may call, like the one every page asks who's
