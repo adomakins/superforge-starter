@@ -73,9 +73,19 @@ merging" (0 approvals) and "Require status checks to pass" with `check`.
   repository has the `RAILWAY_TOKEN` secret ("Setting up Railway", below),
   it skips with a notice, so a new copy's pushes pass before it has a
   Railway project.
+- **`release-tag`**, on a push, in the template only, tags a release once
+  `check` passes. When the version in `.superforge/superforge.json` has no
+  tag yet, it tags the commit on `main` that set that version, `v` and the
+  version, and pushes the tag, which is the release going out (`README.md`,
+  "Releases"). It refuses a version with no heading in `CHANGELOG.md`,
+  since the agent updating a copy reads those notes first. A copy skips it
+  (`github.event.repository.is_template`), since a copy's version says
+  which template release it's on. Railway waits for the whole run, so a
+  release whose tagging fails doesn't deploy the template's own site
+  either.
 
 **The workflow holds itself to a few rules**: its token can only read the
-code (`permissions`), each job stops after 15 minutes rather than GitHub's
+code (`permissions`), but `release-tag`'s, which may push its tag, each job stops after 15 minutes rather than GitHub's
 six hours, and a new push to a PR's branch cancels the run on the push
 before it (`concurrency`), while pushes to `main` each run to the end, in
 order. It reads Node's version from `engines` in `package.json`, as

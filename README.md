@@ -88,15 +88,18 @@ this section, and the names above, in `START-HERE.md`'s step 5.
 `## Unreleased` at the top of `CHANGELOG.md`, written as that file's "How
 a release is written" says. A release is a PR that gives the heading its
 version and day (`## 0.2.0 (2026-12-01)`) and sets `version` in
-`.superforge/superforge.json` to match. Once it merges, tag the merge and
-push the tag:
+`.superforge/superforge.json` to match. Once it merges and passes
+`check`, CI tags the merge, `v` and the version (`release-tag` in
+`.github/workflows/ci.yml`). Copies update from the tags, so a release is
+out once CI has tagged it. A version with no heading in `CHANGELOG.md`
+isn't tagged: the job fails and says why. If CI ever misses a release,
+tag the commit that set the version by hand:
 
 ```bash
 git switch main && git pull
-git tag -a v0.2.0 -m "v0.2.0"
+git tag -a v0.2.0 -m "v0.2.0" "$(git log --first-parent -n 1 --format=%H -- .superforge/superforge.json)"
 git push origin v0.2.0
 ```
 
-Copies update from the tags, so a release is out once its tag is pushed.
 A copy made from `main` between releases already has some of the next
 one, which its update merges cleanly.

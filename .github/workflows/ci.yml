@@ -26,6 +26,14 @@
 # (workbench/commit-and-deploy.md, "CI and deploys"). Until the secret is
 # set, the apply skips with a notice rather than failing, so a new copy's
 # first pushes pass before it has a Railway project.
+#
+# `release-tag` tags each of the template's releases once it reaches main,
+# after `check`. A release is the push that changes the version in
+# .superforge/superforge.json, and copies update from its tag, `v` and the
+# version (workbench/updating.md), so the release is out once the tag is.
+# A version already tagged is left as it is. Only the template runs it: a
+# copy's version says which template release it's on, not a release of its
+# own, so a copy skips it.
 name: CI
 
 on:
@@ -33,7 +41,8 @@ on:
     push:
         branches: [main]
 
-# What every job's GITHUB_TOKEN may do: read the code, nothing more
+# What every job's GITHUB_TOKEN may do: read the code, nothing more.
+# `release-tag` alone may write, to push its tag.
 permissions:
     contents: read
 
@@ -137,3 +146,45 @@ jobs:
                   railway config apply --yes
               env:
                   RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+    # Tags the release in the version file, if it isn't tagged yet, on the
+    # commit on main that set that version: a run that comes late, after
+    # another push or a failure, still tags the release itself.
+    release-tag:
+        needs: check
+        if: ${{ !cancelled() && github.event_name == 'push' && github.event.repository.is_template && needs.check.result == 'success' }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        # Pushing the tag is the one write any job makes to the repository
+        permissions:
+            contents: write
+        # One at a time, so two pushes never race to make the same tag
+        concurrency:
+            group: release-tag
+            cancel-in-progress: false
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  # Every commit, to find the one that set the version
+                  fetch-depth: 0
+            # The agent that updates a copy reads a release's notes before it
+            # takes it, so a version with no heading in CHANGELOG.md fails
+            # here rather than going out without them.
+            - name: Tag the release, if it isn't yet
+              run: |
+                  version=$(jq -r .version .superforge/superforge.json)
+                  tag="v$version"
+                  if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+                      echo "$tag is already tagged"
+                      exit 0
+                  fi
+                  if ! grep -q "^## $version (" CHANGELOG.md; then
+                      echo "::error::.superforge/superforge.json says $version, but CHANGELOG.md has no \"## $version (day)\" heading, so $tag isn't tagged. Give the release its notes, and the next push to main tags it."
+                      exit 1
+                  fi
+                  release=$(git log --first-parent -n 1 --format=%H HEAD -- .superforge/superforge.json)
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+                  git tag -a "$tag" -m "$tag" "$release"
+                  git push origin "refs/tags/$tag"
+                  echo "::notice::Tagged $tag on $(git log -n 1 --format='%h %s' "$release")"
