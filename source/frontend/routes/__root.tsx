@@ -41,7 +41,8 @@ export const Route = createRootRouteWithContext<{
 // Every page's queries share the router's query cache (router.tsx). Every
 // page records what its visitors view, click and run into, for the owner's
 // dashboard on Superforge Infra, from an effect, so only ever in the
-// browser, and asks first, in the banner (frontend/visitors/).
+// browser, and asks first, in the banner, when the server says to
+// (frontend/visitors/).
 function Root() {
     const { queryClient } = Route.useRouteContext()
     const router = useRouter()

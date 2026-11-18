@@ -1,52 +1,37 @@
 import { MINUTE, SECOND } from "@/utilities/primitives/durations"
 import {
-    app_user_id,
     type EventProperties,
     event_name,
     event_properties
 } from "@/utilities/schemas/events"
-import {
-    asking,
-    type ConsentAnswer,
-    type ConsentSetting,
-    consent_answer,
-    remembering
-} from "./consent"
+import type {
+    PageBatch,
+    PageEvent,
+    VisitorConsent
+} from "@/utilities/schemas/visits"
 import {
     type ClickedElement,
     clickProperties,
     errorProperties,
+    type Landing,
     landingProperties,
     type PageError,
-    pagePath
+    pagePath,
+    viewProperties
 } from "./describe"
-import {
-    type DeviceStorage,
-    KEYS,
-    readStored,
-    removeStored,
-    writeStored
-} from "./device"
-import {
-    type Batch,
-    KEEPALIVE_BYTES,
-    keepWaiting,
-    type PageEvent,
-    queued,
-    takeBatch,
-    takeWaiting
-} from "./queue"
-import { sessionId, visitorId } from "./session"
+import { KEEPALIVE_BYTES, queued, takeBatch } from "./queue"
 
-// What happens on the site's pages, as events for Infra: a recorder for
-// the page's life, which browser.ts feeds what the browser tells it. It
-// touches no page itself, only the storage, the clock and the sender it's
-// handed, so the tests run it in Node. README.md here has what's recorded.
+// What happens on the site's pages, as events for the app's server to send
+// on to Infra: a recorder for the page's life, which browser.ts feeds what
+// the browser tells it. It keeps nothing on the device, only in the page's
+// memory, and touches no page itself, only the clock and the senders it's
+// handed, so the tests run it in Node. Who the visitor is, the server says
+// (backend/visits/). README.md here has what's recorded.
 
 /** How long the queue waits before it sends what's in it. */
 export const SEND_EVERY = 5 * SECOND
 
-/** The longest it waits between tries while Infra or the network is down. */
+/** The longest it waits between tries while the app's server is down. */
 export const LONGEST_WAIT = 5 * MINUTE
 
 /** The most errors a page sends, so one in a loop isn't sent forever. */
@@ -55,14 +40,24 @@ export const ERRORS_A_PAGE = 10
 /** What the script sends on its own, which the app's events can't be named. */
 const OWN_EVENTS = ["view", "leave", "click", "error"]
 
-/** What's sent of a visitor who hasn't agreed to be remembered. */
-const ANONYMOUS_EVENTS = ["view", "leave", "error"]
+/**
+ * What the app's server answered a batch: its status, and whether the page
+ * asks the visitor before they're remembered, which only a 200 says; or
+ * null when nothing answered.
+ */
+export type Sent = { status: number; ask: boolean } | null
 
 /**
- * Sends one batch to Infra: the answer's status, or null when nothing
- * answered. `keepalive` as the page hides, so it goes after the page does.
+ * Sends one batch to the app's /api/visits. `keepalive` as the page hides,
+ * so it goes after the page does.
  */
-export type Send = (batch: Batch, keepalive: boolean) => Promise<number | null>
+export type Send = (batch: PageBatch, keepalive: boolean) => Promise<Sent>
+
+/**
+ * Sends the visitor's answer to the banner to /api/visits/consent: whether
+ * the server kept it.
+ */
+export type SendConsent = (consent: VisitorConsent) => Promise<boolean>
 
 // The page being looked at, and what's been seen of it
 type Page = {
@@ -80,78 +75,36 @@ type Page = {
 export type Recorder = ReturnType<typeof recorder>
 
 export function recorder({
-    setting,
-    storage,
     now,
-    send
+    send,
+    sendConsent
 }: {
-    setting: ConsentSetting
-    storage: DeviceStorage
     now: () => number
     send: Send
+    sendConsent: SendConsent
 }) {
-    // The visitor's answer, when the device refused to keep it: otherwise
-    // it's read from the device each time, so an answer in another of the
-    // site's tabs, or the site's data cleared, holds here at once
-    let unkept_answer: ConsentAnswer | null = null
-    let user: string | null = null
     let queue: PageEvent[] = []
     let page: Page | null = null
     let visible = true
     let failures = 0
     let sending = false
     let timer: ReturnType<typeof setTimeout> | null = null
+    // Whether the banner asks the visitor, as the server's latest answer
+    // said
+    let asking = false
+    // The visitor's answers to the banner on this page, counted as each is
+    // given and again as each reaches the server, and how many are on
+    // their way: the answer to a batch sent before the server knew can't
+    // ask them again
+    let answer_changes = 0
+    let answers_on_the_way = 0
     const listeners = new Set<() => void>()
 
-    function currentAnswer() {
-        return (
-            readStored(storage, KEYS.consent, consent_answer) ?? unkept_answer
-        )
-    }
-
-    function remembered() {
-        return remembering(setting, currentAnswer())
-    }
-
-    // Once a visitor declines: everything kept on the device but their
-    // answer is forgotten, and what's waiting loses its IDs, its clicks and
-    // the app's own events
-    function forget() {
-        removeStored(storage, KEYS.visitor)
-        removeStored(storage, KEYS.session)
-        removeStored(storage, KEYS.waiting)
-        queue = queue
-            .filter((event) => ANONYMOUS_EVENTS.includes(event.name))
-            .map(({ name, at, path, properties }) => ({
-                name,
-                at,
-                path,
-                properties
-            }))
-    }
-
-    // An event about the page now, with the IDs when the visitor may be
-    // remembered, and none when they may not, when it's one of the few
-    // sent then at all. `active` is false for a leave, which belongs to
-    // the visit it ends rather than keeping one going.
-    function add(name: string, properties: EventProperties, active = true) {
-        const at = now()
-        const event: PageEvent = {
-            name,
-            at,
-            path: page?.path ?? "/",
-            properties
-        }
-        if (remembered()) {
-            event.visitor = visitorId(storage)
-            event.session = sessionId(storage, at, active)
-            if (user !== null) {
-                event.user = user
-            }
-        } else if (!ANONYMOUS_EVENTS.includes(name)) {
-            return
-        }
-        queue = queued(queue, [event])
+    // An event about the page now
+    function add(name: string, properties: EventProperties) {
+        queue = queued(queue, [
+            { name, at: now(), path: page?.path ?? "/", properties }
+        ])
         schedule(SEND_EVERY)
     }
 
@@ -174,7 +127,7 @@ export function recorder({
         }
         const visible_ms =
             page.visible_since === null ? 0 : now() - page.visible_since
-        add("leave", { scroll: page.deepest, visible_ms }, false)
+        add("leave", { scroll: page.deepest, visible_ms })
         page.open = false
         page.visible_since = null
     }
@@ -193,17 +146,34 @@ export function recorder({
         return Math.min(SEND_EVERY * 2 ** failures, LONGEST_WAIT)
     }
 
-    // What a batch's answer means for it: sent, refused and dropped (a
-    // 4xx, which sending again won't change), or kept for another try (no
-    // answer, or a 5xx)
-    function settle(batch: PageEvent[], status: number | null) {
-        if (status !== null && status >= 200 && status < 300) {
+    // Whether the banner asks, and the banner told when that changes
+    function ask(now_asking: boolean) {
+        if (asking !== now_asking) {
+            asking = now_asking
+            for (const listener of listeners) {
+                listener()
+            }
+        }
+    }
+
+    // What a batch's answer means for it: sent, with whether to ask the
+    // visitor unless they've answered since it went; refused and dropped
+    // (a 4xx, which sending again won't change); or kept for another try
+    // (no answer, or a 5xx, while the app's server is down or deploying)
+    function settle(batch: PageEvent[], sent: Sent, answers_then: number) {
+        if (sent !== null && sent.status >= 200 && sent.status < 300) {
             failures = 0
-        } else if (status !== null && status >= 400 && status < 500) {
-            console.warn("Visitors: Infra refused the page's events", {
-                status,
-                events: batch.length
-            })
+            if (answers_then === answer_changes && answers_on_the_way === 0) {
+                ask(sent.ask)
+            }
+        } else if (sent !== null && sent.status >= 400 && sent.status < 500) {
+            console.warn(
+                "Visitors: the app's server refused the page's events",
+                {
+                    status: sent.status,
+                    events: batch.length
+                }
+            )
             failures = 0
         } else {
             failures += 1
@@ -220,6 +190,19 @@ export function recorder({
         }
     }
 
+    // Sends `batch`, and settles it once it's answered
+    async function sendBatch(batch: PageEvent[], keepalive: boolean) {
+        const answers_then = answer_changes
+        const sent = await send(
+            { sent_at: now(), events: batch },
+            keepalive
+        ).catch((error: unknown) => {
+            console.debug("Visitors: sending threw", { error })
+            return null
+        })
+        settle(batch, sent, answers_then)
+    }
+
     // Sends the first batch waiting, one call at a time
     async function sendNext() {
         if (sending || queue.length === 0) {
@@ -232,32 +215,18 @@ export function recorder({
             return
         }
         sending = true
-        const status = await send(
-            { sent_at: now(), events: batch },
-            false
-        ).catch((error: unknown) => {
-            console.debug("Visitors: sending threw", { error })
-            return null
-        })
+        await sendBatch(batch, false)
         sending = false
-        settle(batch, status)
     }
 
     // As the page hides, which may be the last the script runs: sends
-    // what's waiting with `keepalive`, as much as a browser allows. With
-    // the visitor's agreement, what can't go now (the rest, or all of it
-    // while Infra or the network is down) is kept on the device for the
-    // site's next page; without it, it stays in memory, and goes if the
-    // page comes back.
+    // what's waiting with `keepalive`, as much as a browser allows, even
+    // while the server's been down, since there may be no later. What
+    // can't go stays in memory, and goes if the page comes back.
     function sendAsPageHides() {
         if (timer !== null) {
             clearTimeout(timer)
             timer = null
-        }
-        if (failures > 0 && remembered()) {
-            keepWaiting(storage, queue, now())
-            queue = []
-            return
         }
         let spent = 0
         while (queue.length > 0) {
@@ -270,62 +239,40 @@ export function recorder({
             } else {
                 spent += bytes
                 queue = rest
-                void send({ sent_at: now(), events: batch }, true)
-                    .catch((error: unknown) => {
-                        console.debug("Visitors: sending threw", { error })
-                        return null
-                    })
-                    .then((status) => settle(batch, status))
+                void sendBatch(batch, true)
             }
-        }
-        if (queue.length > 0 && remembered()) {
-            keepWaiting(storage, queue, now())
-            queue = []
         }
     }
 
     // A page the router resolved: the last one's leave and this one's
     // view, unless only its query or fragment changed
-    function navigated(path: string) {
+    function navigated(path: string, title: string) {
         if (page !== null && page.path === pagePath(path)) {
             return
         }
         leave()
-        view(path, {})
-    }
-
-    function notify() {
-        for (const listener of listeners) {
-            listener()
-        }
+        view(path, viewProperties(title))
     }
 
     return {
         /**
          * The page the visitor landed on: its view, with where they came
-         * from. Called again, as a dev server's strict mode does, it only
-         * catches up with the path.
+         * from and what on. Called again, as a dev server's strict mode
+         * does, it only catches up with the path.
          */
-        begin(landing: {
-            path: string
-            url: string
-            referrer: string
-            visible: boolean
-        }) {
+        begin(landing: Landing & { path: string; visible: boolean }) {
             if (page !== null) {
-                navigated(landing.path)
+                navigated(landing.path, landing.title)
                 return
             }
             visible = landing.visible
-            if (remembered()) {
-                queue = queued(takeWaiting(storage, now()), queue)
-            }
             view(landing.path, landingProperties(landing))
         },
 
         /**
-         * The router resolved a page: the last one's leave and this one's
-         * view, unless only its query or fragment changed.
+         * The router resolved a page, with this title: the last one's
+         * leave and this one's view, unless only its query or fragment
+         * changed.
          */
         navigated,
 
@@ -356,13 +303,10 @@ export function recorder({
                 page.open = true
                 page.visible_since = now()
             }
-            if (remembered()) {
-                queue = queued(takeWaiting(storage, now()), queue)
-                schedule(SEND_EVERY)
-            }
+            schedule(SEND_EVERY)
         },
 
-        /** A click, sent only of a visitor who agreed to be remembered. */
+        /** A click on a link, a button or anything named with `data-track`. */
         clicked(element: ClickedElement, page_url: string) {
             add("click", clickProperties(element, page_url))
         },
@@ -399,49 +343,38 @@ export function recorder({
             }
         },
 
-        /** Who's signed in, by the app's own ID, or null once they're not. */
-        identify(user_id: string | null) {
-            const parsed = app_user_id.safeParse(user_id)
-            if (user_id !== null && !parsed.success) {
-                console.warn(
-                    "Visitors: a user is the app's own ID for them, never an email"
-                )
-            }
-            user = parsed.success ? parsed.data : null
-        },
-
         /**
-         * The visitor's answer to the banner, kept so they aren't asked
-         * again. Declining forgets everything else kept on the device, and
-         * what's waiting loses its IDs and its clicks and app events.
+         * The visitor's answer to the banner, which hides it at once and
+         * goes to the server, which keeps it in a cookie. Should the
+         * server not keep it, the next batch's answer asks again.
          */
-        answer(given: ConsentAnswer) {
-            const kept = writeStored(storage, KEYS.consent, given)
-            unkept_answer = kept ? null : given
-            if (given === "declined") {
-                forget()
-            }
-            notify()
+        answer(consent: VisitorConsent) {
+            answer_changes += 1
+            answers_on_the_way += 1
+            ask(false)
+            void sendConsent(consent)
+                .catch((error: unknown) => {
+                    console.debug("Visitors: sending the answer threw", {
+                        error
+                    })
+                    return false
+                })
+                .then(() => {
+                    answer_changes += 1
+                    answers_on_the_way -= 1
+                })
         },
 
-        /**
-         * Another of the site's tabs changed what's kept, as answering the
-         * banner there does: this one follows its answer.
-         */
-        storageChanged() {
-            if (currentAnswer() === "declined") {
-                forget()
-            }
-            notify()
-        },
-
-        /** Whether the banner asks this visitor. */
+        /** Whether the banner asks the visitor now. */
         asking() {
-            return asking(setting, currentAnswer())
+            return asking
         },
 
-        /** Calls `listener` when the visitor answers; answers how to stop. */
-        onAnswer(listener: () => void) {
+        /**
+         * Calls `listener` when whether the banner asks changes; answers
+         * how to stop.
+         */
+        onAskingChange(listener: () => void) {
             listeners.add(listener)
             return () => {
                 listeners.delete(listener)

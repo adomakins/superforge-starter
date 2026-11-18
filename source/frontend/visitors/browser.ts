@@ -1,12 +1,11 @@
-import { INFRA_URL } from "@/utilities/infra"
+import { client } from "@/backend/client"
 import { rejectionError } from "./describe"
-import { KEYS } from "./device"
-import type { Batch } from "./queue"
-import type { Recorder, Send } from "./record"
+import type { Recorder, Send, SendConsent } from "./record"
 
-// The recorder (record.ts) wired to the page: the router's pages, the
-// scrolling, the page hiding and coming back, the clicks and the errors,
-// and the call to Infra. Only ever runs in a browser, from index.ts's
+// The recorder (record.ts) wired to the page and the router: the router's
+// pages, the scrolling, the page hiding and coming back, the clicks and the
+// errors, and the calls to the app's own /api/visits, which sends them on
+// to Infra (backend/visits/). Only ever runs in a browser, from index.ts's
 // `startVisitors`, which an effect calls, so never in the prerender.
 
 /** The router, as far as the script needs it: when it's resolved a page. */
@@ -24,34 +23,46 @@ const CLICKABLE = "a, button, [role=button], [data-track]"
 const FIELDS = "input, textarea, select, [contenteditable]"
 
 /**
- * Sends a batch to the project's events on Infra, as plain text, which a
- * browser sends to another site without asking it first. Never
- * `navigator.sendBeacon`, which ad blockers refuse to another site. In a
- * dev server it sends nothing, and logs the batch instead.
+ * Sends a batch to the app's own /api/visits, as JSON, with the site's
+ * cookies, as any call to its API goes: never to Infra, and never with
+ * `navigator.sendBeacon`, which ad blockers refuse.
  */
-export function sender(project_id: string, development: boolean): Send {
-    if (development) {
-        return async (batch: Batch) => {
-            console.debug("Visitors: what a build would send to Infra", batch)
-            return 200
+export const sendBatch: Send = async (batch, keepalive) => {
+    try {
+        const response = await client.api.visits.$post(
+            { json: batch },
+            { init: { keepalive } }
+        )
+        if (response.status === 200) {
+            const { ask } = await response.json()
+            return { status: response.status, ask }
+        } else {
+            return { status: response.status, ask: false }
         }
+    } catch (error) {
+        // Offline, or an answer the page can't read
+        console.debug("Visitors: the app's server didn't answer", { error })
+        return null
     }
-    const address = `${INFRA_URL}/projects/${project_id}/events`
-    return async (batch, keepalive) => {
-        try {
-            const response = await fetch(address, {
-                method: "POST",
-                headers: { "Content-Type": "text/plain" },
-                body: JSON.stringify(batch),
-                keepalive,
-                credentials: "omit"
+}
+
+/** Sends the visitor's answer to the banner to /api/visits/consent. */
+export const sendConsent: SendConsent = async (consent) => {
+    try {
+        const response = await client.api.visits.consent.$post({
+            json: { consent }
+        })
+        if (response.ok) {
+            return true
+        } else {
+            console.warn("Visitors: the app's server didn't keep the answer", {
+                status: response.status
             })
-            return response.status
-        } catch (error) {
-            // Offline, blocked, or an answer the page can't read
-            console.debug("Visitors: Infra didn't answer", { error })
-            return null
+            return false
         }
+    } catch (error) {
+        console.warn("Visitors: the app's server didn't answer", { error })
+        return false
     }
 }
 
@@ -64,6 +75,9 @@ export function listen(visitors: Recorder, router: VisitorsRouter) {
         path: window.location.pathname,
         url: window.location.href,
         referrer: document.referrer,
+        title: document.title,
+        screen: screenSize(),
+        language: navigator.language,
         visible: document.visibilityState === "visible"
     })
 
@@ -79,9 +93,10 @@ export function listen(visitors: Recorder, router: VisitorsRouter) {
     }
     measure()
 
+    // Once the router has drawn the page, so its title is the new one's
     const unsubscribe = router.subscribe("onResolved", (event) => {
         guarded(() => {
-            visitors.navigated(event.toLocation.pathname)
+            visitors.navigated(event.toLocation.pathname, document.title)
             measure()
         })
     })
@@ -111,20 +126,6 @@ export function listen(visitors: Recorder, router: VisitorsRouter) {
             }
         ],
         [document, "click", (event) => clicked(visitors, event)],
-        [
-            window,
-            "storage",
-            (event) => {
-                // Another tab answered the banner, or the site's data was
-                // cleared
-                if (
-                    event instanceof StorageEvent &&
-                    (event.key === null || event.key === KEYS.consent)
-                ) {
-                    visitors.storageChanged()
-                }
-            }
-        ],
         [
             window,
             "error",
@@ -174,6 +175,16 @@ function guarded(run: () => void) {
         run()
     } catch (error) {
         console.debug("Visitors: a listener threw", { error })
+    }
+}
+
+// The screen's size in CSS pixels, or null where the browser won't say
+function screenSize() {
+    const { width, height } = window.screen
+    if (width > 0 && height > 0) {
+        return { width, height }
+    } else {
+        return null
     }
 }
 

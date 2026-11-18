@@ -3,22 +3,24 @@ import { Button } from "@/frontend/components/primitives/button"
 import {
     answerConsent,
     askingConsent,
-    onConsentAnswer
+    onAskingChange
 } from "@/frontend/visitors"
 
 /**
- * Asks a visitor, once, whether the site may remember their browser
- * between visits (frontend/visitors/). A small note in a corner rather
- * than a modal, so the page works the same whether they answer or not, and
- * until they accept, nothing is kept on their device. Both answers are the
- * same size, and both are remembered. It shows only in a browser, when
- * `CONSENT` is `"ask"`, the app has an Infra project, and this browser
- * hasn't answered: never in the prerender, where it's always hidden. The
- * root route draws it on every page, the dashboard's too.
+ * Asks a visitor whether the site may remember their browser between
+ * visits (frontend/visitors/). A small note in a corner rather than a
+ * modal, so the page works the same whether they answer or not, and until
+ * they accept, the site sets no lasting cookie on them. Both answers are
+ * the same size, and the server keeps either in a cookie, so they aren't
+ * asked again. It shows only in a browser, when the server's latest answer
+ * to the page's events said to ask: by VISITOR_MODE (utilities/visitors.ts),
+ * and where the visitor is, for a visitor who hasn't answered. Never in
+ * the prerender, where it's always hidden. The root route draws it on
+ * every page, the dashboard's too.
  */
 export function ConsentBanner() {
     const asking = useSyncExternalStore(
-        onConsentAnswer,
+        onAskingChange,
         askingConsent,
         () => false
     )
@@ -37,7 +39,7 @@ export function ConsentBanner() {
                 <div className="flex gap-2">
                     <Button
                         variant="outline"
-                        onClick={() => answerConsent("accepted")}
+                        onClick={() => answerConsent("given")}
                         className="flex-1 sm:flex-none sm:px-4"
                     >
                         Accept

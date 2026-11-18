@@ -1,18 +1,33 @@
 import { expect, test, vi } from "vitest"
+import { event_properties } from "@/utilities/schemas/events"
 import {
     type ClickedElement,
     clickProperties,
     errorProperties,
+    type Landing,
     landingProperties,
     pagePath,
     rejectionError,
-    scrub
+    scrub,
+    viewProperties
 } from "../describe"
 
 // What an event says about the page: never a query, a fragment or an
 // email address, and only so much of anything
 
 const PAGE = "https://example.com/pricing?coupon=SECRET#plans"
+
+// A landing with nothing to say but what a test gives it
+function landing(overrides: Partial<Landing>): Landing {
+    return {
+        url: "https://example.com/",
+        referrer: "",
+        title: "",
+        screen: null,
+        language: "",
+        ...overrides
+    }
+}
 
 function link(overrides: Partial<ClickedElement>): ClickedElement {
     return {
@@ -45,33 +60,122 @@ test("free text loses email addresses, queries and extra space", () => {
 
 test("a landing names the site it came from, never this one", () => {
     expect(
-        landingProperties({
-            url: "https://example.com/",
-            referrer: "https://news.ycombinator.com/item?id=1"
-        })
+        landingProperties(
+            landing({ referrer: "https://news.ycombinator.com/item?id=1" })
+        )
     ).toEqual({ referrer: "news.ycombinator.com" })
     expect(
-        landingProperties({
-            url: "https://example.com/pricing",
-            referrer: "https://www.example.com/"
-        })
+        landingProperties(
+            landing({
+                url: "https://example.com/pricing",
+                referrer: "https://www.example.com/"
+            })
+        )
     ).toEqual({})
-    expect(
-        landingProperties({ url: "https://example.com/", referrer: "" })
-    ).toEqual({})
+    expect(landingProperties(landing({}))).toEqual({})
 })
 
-test("a landing keeps its campaign from the address", () => {
+test("a landing keeps every utm_ parameter in its address, and nothing else of it", () => {
     expect(
-        landingProperties({
-            url: "https://example.com/?utm_source=newsletter&utm_medium=email&utm_campaign=%20launch%20&email=ada@example.com",
-            referrer: ""
-        })
+        landingProperties(
+            landing({
+                url: "https://example.com/?utm_source=newsletter&utm_medium=email&utm_campaign=%20launch%20&utm_term=crm&utm_content=hero&utm_id=42&utm_source_platform=meta&utm_source=again&utm_empty=&utm_=x&email=ada@example.com&utm_contact=ada@example.com"
+            })
+        )
     ).toEqual({
         utm_source: "newsletter",
         utm_medium: "email",
-        utm_campaign: "launch"
+        utm_campaign: "launch",
+        utm_term: "crm",
+        utm_content: "hero",
+        utm_id: "42",
+        utm_source_platform: "meta",
+        utm_contact: "[email]"
     })
+})
+
+test("a landing keeps the first ten utm_ parameters", () => {
+    const parameters = Array.from(
+        { length: 14 },
+        (_, index) => `utm_custom_${index}=${index}`
+    ).join("&")
+    const properties = landingProperties(
+        landing({ url: `https://example.com/?${parameters}` })
+    )
+    expect(Object.keys(properties)).toEqual(
+        Array.from({ length: 10 }, (_, index) => `utm_custom_${index}`)
+    )
+})
+
+test("a landing keeps an ad's click ID, whole", () => {
+    const gclid = `Cj0KCQiA${"x".repeat(200)}`
+    expect(
+        landingProperties(
+            landing({
+                url: `https://example.com/?gclid=${gclid}&gbraid=0AAAAA&wbraid=CkAB&fbclid=IwAR1&msclkid=abc123&ttclid=E.C.P&li_fat_id=7f3c&dclid=nope`
+            })
+        )
+    ).toEqual({
+        gclid,
+        gbraid: "0AAAAA",
+        wbraid: "CkAB",
+        fbclid: "IwAR1",
+        msclkid: "abc123",
+        ttclid: "E.C.P",
+        li_fat_id: "7f3c"
+    })
+})
+
+test("a landing says what it came on: the screen's size and the browser's language", () => {
+    expect(
+        landingProperties(
+            landing({
+                screen: { width: 390, height: 844.5 },
+                language: "en-GB"
+            })
+        )
+    ).toEqual({ screen: "390x845", language: "en-GB" })
+})
+
+test("every view keeps its page's title, scrubbed", () => {
+    expect(viewProperties("Pricing · Acme")).toEqual({
+        title: "Pricing · Acme"
+    })
+    expect(viewProperties("  Welcome back,\n ada@example.com ")).toEqual({
+        title: "Welcome back, [email]"
+    })
+    expect(viewProperties("x".repeat(300)).title).toHaveLength(200)
+    expect(viewProperties("   ")).toEqual({})
+    expect(landingProperties(landing({ title: "Home" }))).toEqual({
+        title: "Home"
+    })
+})
+
+test("everything a landing can say stays within what Infra takes", () => {
+    const campaign = Array.from(
+        { length: 20 },
+        (_, index) => `utm_${"c".repeat(55)}${index}=${"v".repeat(400)}`
+    ).join("&")
+    const ads = [
+        "gclid",
+        "gbraid",
+        "wbraid",
+        "fbclid",
+        "msclkid",
+        "ttclid",
+        "li_fat_id"
+    ]
+        .map((name) => `${name}=${"a".repeat(2000)}`)
+        .join("&")
+    const properties = landingProperties({
+        url: `https://example.com/?${campaign}&${ads}`,
+        referrer: "https://news.ycombinator.com/",
+        title: "t".repeat(2000),
+        screen: { width: 1920, height: 1080 },
+        language: "en-US"
+    })
+    expect(Object.keys(properties)).toHaveLength(21)
+    expect(event_properties.safeParse(properties).success).toBe(true)
 })
 
 test("a click is named by data-track, or by its tag", () => {

@@ -1,8 +1,8 @@
 import type { EventProperties } from "@/utilities/schemas/events"
 
 // What an event says about the page, from what the browser tells the
-// script: the path, where a visitor came from, what they clicked and what
-// went wrong. Nothing here touches the page itself (browser.ts does), so
+// script: the path and the title, where a visitor came from, what they
+// clicked and what went wrong. Nothing here touches the page itself (browser.ts does), so
 // the tests run it in Node. A query string or a fragment can hold a token
 // or an address, so none is ever kept, and neither is anything shaped like
 // an email address.
@@ -13,14 +13,44 @@ const LONGEST_TEXT = 80
 /** The longest an error's message is kept. */
 const LONGEST_MESSAGE = 500
 
-/** The longest a campaign's name, from the address, is kept. */
+/** The longest a campaign's parameter, from the address, is kept. */
 const LONGEST_CAMPAIGN = 200
+
+/** The longest an ad's click ID, from the address, is kept: all of it. */
+const LONGEST_CLICK_ID = 1000
+
+/** The longest a page's title is kept. */
+const LONGEST_TITLE = 200
 
 /** The longest a click's name, its `data-track`, is kept. */
 const LONGEST_NAME = 64
 
-/** The campaign's parameters a landing's address can carry. */
-const CAMPAIGN = ["utm_source", "utm_medium", "utm_campaign"] as const
+/** The longest a browser's language, like `en-US`, is kept. */
+const LONGEST_LANGUAGE = 35
+
+/**
+ * A campaign's parameter in a landing's address: `utm_`, then its name,
+ * which as a property is at most 64 characters.
+ */
+const CAMPAIGN_PARAMETER = /^utm_[\w-]{1,60}$/
+
+/** The most campaign parameters a landing keeps, the first in its address. */
+const CAMPAIGN_PARAMETERS = 10
+
+/**
+ * The ad networks' click IDs a landing's address can carry, which tie a
+ * visit to the ad it came from: Google's (`gclid`, and `gbraid` and
+ * `wbraid` from iPhones), Meta's, Microsoft's, TikTok's and LinkedIn's.
+ */
+const CLICK_IDS = [
+    "gclid",
+    "gbraid",
+    "wbraid",
+    "fbclid",
+    "msclkid",
+    "ttclid",
+    "li_fat_id"
+] as const
 
 /**
  * A page's path as Infra takes it: from `/`, at most 2,048 characters,
@@ -66,24 +96,42 @@ function parsedUrl(text: string, base?: string) {
     }
 }
 
-/**
- * What the first view of a visit to the site says about where the visitor
- * came from: `referrer`, the other site's hostname, never one of this
- * site's own pages, and the campaign in the address it landed on
- * (`utm_source`, `utm_medium`, `utm_campaign`).
- */
-export function landingProperties({
-    url,
-    referrer
-}: {
+/** What every view says about its page: its `title`, scrubbed. */
+export function viewProperties(title: string): EventProperties {
+    const scrubbed = scrub(title, LONGEST_TITLE)
+    if (scrubbed === "") {
+        return {}
+    } else {
+        return { title: scrubbed }
+    }
+}
+
+/** What the script reads off the page a visitor landed on (browser.ts). */
+export type Landing = {
     // The address the page landed on
     url: string
     // `document.referrer`: the page before, or empty
     referrer: string
-}): EventProperties {
-    const properties: EventProperties = {}
-    const landed = parsedUrl(url)
-    const from = referrer === "" ? null : parsedUrl(referrer)
+    // `document.title`
+    title: string
+    // The screen's size in CSS pixels, or null where it can't be read
+    screen: { width: number; height: number } | null
+    // `navigator.language`, like `en-US`
+    language: string
+}
+
+/**
+ * What the first view of a visit to the site says, beside its `title`:
+ * where the visitor came from (`referrer`, the other site's hostname,
+ * never one of this site's own pages; every `utm_` parameter in the
+ * address it landed on, the first ten; and an ad's click ID, like
+ * `gclid`), and what they came on (`screen`, like `1920x1080`, and
+ * `language`).
+ */
+export function landingProperties(landing: Landing): EventProperties {
+    const properties: EventProperties = viewProperties(landing.title)
+    const landed = parsedUrl(landing.url)
+    const from = landing.referrer === "" ? null : parsedUrl(landing.referrer)
     if (
         from !== null &&
         (from.protocol === "http:" || from.protocol === "https:") &&
@@ -91,10 +139,42 @@ export function landingProperties({
     ) {
         properties.referrer = from.hostname
     }
-    for (const parameter of CAMPAIGN) {
-        const value = landed?.searchParams.get(parameter)?.trim()
-        if (value !== undefined && value !== "") {
-            properties[parameter] = scrub(value, LONGEST_CAMPAIGN)
+    if (landed !== null) {
+        Object.assign(properties, addressProperties(landed.searchParams))
+    }
+    if (landing.screen !== null) {
+        const { width, height } = landing.screen
+        properties.screen = `${Math.round(width)}x${Math.round(height)}`
+    }
+    const language = scrub(landing.language, LONGEST_LANGUAGE)
+    if (language !== "") {
+        properties.language = language
+    }
+    return properties
+}
+
+// What a landing's address says of the campaign and the ad it came from:
+// each `utm_` parameter, the first ten, and each click ID, the first of
+// each name, scrubbed, and none that's empty
+function addressProperties(parameters: URLSearchParams) {
+    const properties: EventProperties = {}
+    let campaign = 0
+    for (const [name, value] of parameters) {
+        const scrubbed = scrub(value, LONGEST_CAMPAIGN)
+        if (
+            CAMPAIGN_PARAMETER.test(name) &&
+            campaign < CAMPAIGN_PARAMETERS &&
+            !Object.hasOwn(properties, name) &&
+            scrubbed !== ""
+        ) {
+            properties[name] = scrubbed
+            campaign += 1
+        }
+    }
+    for (const name of CLICK_IDS) {
+        const scrubbed = scrub(parameters.get(name) ?? "", LONGEST_CLICK_ID)
+        if (scrubbed !== "") {
+            properties[name] = scrubbed
         }
     }
     return properties

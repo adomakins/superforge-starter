@@ -2,6 +2,7 @@ import { z } from "zod"
 import {
     app_user_id,
     browser_id,
+    EVENTS_A_CALL,
     event_name,
     event_properties,
     page_path
@@ -9,14 +10,8 @@ import {
 
 // What the app's server tells Infra happened, through `sendEvents`
 // (index.ts): what only the server knows, like a sign-up or a payment.
-// The pages send their own (frontend/visitors/). README.md, "Events", has
-// the call.
-
-/** How many events one call can carry, as Infra takes them. */
-export const EVENTS_A_CALL = 100
-
-/** How big one call's body can be, in bytes, as Infra takes it. */
-export const EVENTS_BODY_LIMIT = 64 * 1024
+// The pages' events go through `sendVisit` instead (visits.ts). README.md,
+// "Events", has the call.
 
 /**
  * One event from the server: its name, and whatever else is known of it.

@@ -2,8 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { parseEnv } from "node:util"
 import { z } from "zod"
-import { INFRA_URL } from "@/utilities/infra"
-import { infraClient } from "./client"
+import { INFRA_URL, infraClient } from "./client"
 import type { Infra, InfraUnavailable } from "./index"
 import { standInInfra, type WaitingSignIn } from "./stand-in"
 
@@ -113,7 +112,10 @@ export function chooseInfra({
                 "Infra: no test key, so sign-in uses the stand-in, which emails nothing"
             )
         }
-        return { infra: standInInfra(devServerSignIns()), using: "stand-in" }
+        return {
+            infra: standInInfra({ waiting: devServerSignIns(), logs: true }),
+            using: "stand-in"
+        }
     }
 }
 
@@ -201,6 +203,9 @@ function unavailableInfra(): Infra {
             return unavailable
         },
         async sendEvents() {
+            return unavailable
+        },
+        async sendVisit() {
             return unavailable
         }
     }

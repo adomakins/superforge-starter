@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { expect, test, vi } from "vitest"
 import { infraClient } from "../client"
+import type { Visit } from "../index"
 
 // The client against a fake of Infra's API, answering what Infra's README
 // says each call answers, so no test reaches the real one
@@ -306,6 +307,87 @@ test("events to an Infra that refuses the key, or doesn't answer, are unavailabl
         }
     })
     expect(await down.sendEvents([{ name: "signed-up" }])).toEqual({
+        ok: false,
+        error: { reason: "unavailable" }
+    })
+})
+
+// A batch of a page's events, as the app's /api/visits sends it
+const VISIT: Visit = {
+    mode: "ask-in-eu",
+    visitor: {
+        id: "2f1c8e64-7b5a-4f2e-9c3d-8a6b1e0f4d27",
+        consent: "unasked",
+        user: null,
+        ip: "203.0.113.9",
+        user_agent: "Mozilla/5.0"
+    },
+    sent_at: 1_763_445_600_000,
+    events: [
+        {
+            name: "view",
+            at: 1_763_445_598_000,
+            path: "/pricing",
+            properties: { referrer: "google.com", utm_source: "google" }
+        }
+    ]
+}
+
+test("a page's events go to /v1/visits with the key, as the page sent them, and answer what Infra decided", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const { infra, received } = fakeInfra({
+        status: 200,
+        body: { kept: 1, remembered: false, ask: true }
+    })
+    expect(await infra.sendVisit(VISIT)).toEqual({
+        ok: true,
+        data: { kept: 1, remembered: false, ask: true }
+    })
+    expect(received).toEqual([
+        { path: "/v1/visits", key: `Bearer ${KEY}`, body: VISIT }
+    ])
+})
+
+test("a page's events Infra refuses say why, and are logged as the app's mistake", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+    const { infra } = fakeInfra({
+        status: 400,
+        body: { error: "invalid", fields: ["events.0.path"] }
+    })
+    expect(await infra.sendVisit(VISIT)).toEqual({
+        ok: false,
+        error: { reason: "invalid", fields: ["events.0.path"] }
+    })
+    expect(logged).toHaveBeenCalledWith(
+        "Infra refused a page's events",
+        expect.objectContaining({ status: 400 })
+    )
+})
+
+test("a page's events to an Infra that's down, or answers what the app doesn't expect, are unavailable", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const cases = [
+        { status: 503, body: { error: "unavailable" } },
+        { status: 200, body: { kept: 1 } },
+        { status: 401, body: { error: "unknown-key" } }
+    ]
+    for (const answer of cases) {
+        const { infra } = fakeInfra(answer)
+        expect(await infra.sendVisit(VISIT)).toEqual({
+            ok: false,
+            error: { reason: "unavailable" }
+        })
+    }
+    const down = infraClient({
+        key: KEY,
+        url: ADDRESS,
+        send: async () => {
+            throw new TypeError("fetch failed")
+        }
+    })
+    expect(await down.sendVisit(VISIT)).toEqual({
         ok: false,
         error: { reason: "unavailable" }
     })

@@ -1,10 +1,16 @@
 import { z } from "zod"
 
 // An event's fields, as Superforge Infra checks them: what the pages send
-// (frontend/visitors/) and what the server sends (backend/infra/), each
-// checked here the same as Infra will, so a wrong one is caught in the app
-// rather than refused by Infra. backend/infra/README.md, "Events", has the
-// calls.
+// the app's own /api/visits (frontend/visitors/, backend/visits/) and what
+// the server sends (backend/infra/), each checked here the same as Infra
+// will, so a wrong one is caught in the app rather than refused by Infra.
+// backend/infra/README.md, "Events", has the calls.
+
+/** How many events one call carries at most, as Infra takes them. */
+export const EVENTS_A_CALL = 100
+
+/** How big one call's body can be, in bytes, as Infra takes it. */
+export const EVENTS_BODY_LIMIT = 64 * 1024
 
 /**
  * An event's name: lowercase words joined by hyphens, at most 64
@@ -31,8 +37,8 @@ export const event_properties = z
 export type EventProperties = z.infer<typeof event_properties>
 
 /**
- * A browser's lasting visitor ID, or its visit's: 8 to 64 letters, digits,
- * `_` or `-`.
+ * A visitor's lasting ID, which the app's `visitor` cookie holds: 8 to 64
+ * letters, digits, `_` or `-`, like a UUID.
  */
 export const browser_id = z.string().regex(/^[\w-]{8,64}$/)
 

@@ -1,7 +1,10 @@
 import { randomToken } from "@/backend/auth/tokens"
 import { MINUTE } from "@/utilities/primitives/durations"
-import { EVENTS_BODY_LIMIT, eventsBody, server_events } from "./events"
+import { EVENTS_BODY_LIMIT } from "@/utilities/schemas/events"
+import type { VisitorMode } from "@/utilities/visitors"
+import { eventsBody, server_events } from "./events"
 import type { Infra } from "./index"
+import { type VisitConsent, visit } from "./visits"
 
 // How Infra treats a code: it works for 15 minutes and five tries, and a
 // new one for the same address replaces it, link and all
@@ -23,17 +26,23 @@ export type WaitingSignIn = {
  * the code and the link, and verifying checks them as Infra does: each
  * works once, for 15 minutes, and a code for five tries. No limits apply,
  * as none do to a test key. Events are checked as Infra checks them, and
- * none is kept. The tests always use it, so they never reach
- * Infra, and so does a dev server with no test key (choose.ts). A build
- * never does: anyone could sign in as anyone, since the page shows the
- * code.
+ * none is kept; a page's are answered by the app's mode as Infra answers
+ * them for a visitor it can't place (`treatment`). The tests always use
+ * it, so they never reach Infra, and so does a dev server with no test key
+ * (choose.ts). A build never does: anyone could sign in as anyone, since
+ * the page shows the code.
  *
  * `waiting` is where it keeps what it sent, by address: its own, or one
- * that outlives a dev server's reloads.
+ * that outlives a dev server's reloads. With `logs`, as a dev server has
+ * it, each batch of a page's events is logged, since nothing keeps them.
  */
-export function standInInfra(
-    waiting: Map<string, WaitingSignIn> = new Map()
-): Infra {
+export function standInInfra({
+    waiting = new Map(),
+    logs = false
+}: {
+    waiting?: Map<string, WaitingSignIn>
+    logs?: boolean
+} = {}): Infra {
     return {
         async startSignIn({ email, origin }) {
             const sent: WaitingSignIn = {
@@ -118,7 +127,60 @@ export function standInInfra(
                 )
                 return { ok: false, error: { reason: "invalid", fields } }
             }
+        },
+
+        async sendVisit(sent) {
+            const body = JSON.stringify(sent)
+            if (new TextEncoder().encode(body).byteLength > EVENTS_BODY_LIMIT) {
+                return {
+                    ok: false,
+                    error: { reason: "too-large", limit: EVENTS_BODY_LIMIT }
+                }
+            }
+            const checked = visit.safeParse(sent)
+            if (!checked.success) {
+                // The fields that failed, as Infra names them
+                const fields = checked.error.issues.map((issue) =>
+                    issue.path.join(".")
+                )
+                return { ok: false, error: { reason: "invalid", fields } }
+            }
+            const { mode, visitor, events } = checked.data
+            const { remembered, ask } = treatment(mode, visitor.consent)
+            if (logs) {
+                // The events on their own, so a terminal shows each one's
+                // properties rather than [Object]
+                console.info(
+                    "Infra's stand-in: a page's events, which Infra would keep, and which nothing keeps here",
+                    {
+                        mode,
+                        consent: visitor.consent,
+                        user: visitor.user,
+                        remembered,
+                        ask
+                    },
+                    events
+                )
+            }
+            return { ok: true, data: { kept: 0, remembered, ask } }
         }
+    }
+}
+
+/**
+ * Whether Infra remembers a visitor, and whether their page asks them, by
+ * the app's mode and what they answered, as README.md's table has it, for a
+ * visitor whose country is unknown, as every one's is here: so
+ * `ask-in-eu` treats them as `ask` does.
+ */
+function treatment(mode: VisitorMode, consent: VisitConsent) {
+    if (mode === "remember") {
+        return { remembered: consent !== "declined", ask: false }
+    } else if (mode === "ask" || mode === "ask-in-eu") {
+        return { remembered: consent === "given", ask: consent === "unasked" }
+    } else {
+        // `never`
+        return { remembered: false, ask: false }
     }
 }
 

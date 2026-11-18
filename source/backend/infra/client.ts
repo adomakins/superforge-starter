@@ -1,8 +1,8 @@
-import { INFRA_URL } from "@/utilities/infra"
 import { SECOND } from "@/utilities/primitives/durations"
 import {
     events_refused,
     sent_events,
+    sent_visit,
     start_refused,
     started_sign_in,
     verified_sign_in,
@@ -10,6 +10,12 @@ import {
 } from "./answers"
 import { eventsBody } from "./events"
 import type { Infra, InfraUnavailable } from "./index"
+
+/**
+ * Infra's API, which a project's keys call. A server can be pointed at
+ * another Infra with `INFRA_URL` (choose.ts).
+ */
+export const INFRA_URL = "https://infra.superforge.studio/v1"
 
 // How long a call waits for Infra's answer. Starting a sign-in waits on
 // Infra sending the email, which takes a second or two.
@@ -134,6 +140,35 @@ export function infraClient({
                     // What the app sent is wrong, which only a change here
                     // fixes
                     console.error("Infra refused the app's events", {
+                        call,
+                        status: answer.status,
+                        refused: parsed.data
+                    })
+                    return { ok: false, error: parsed.data }
+                } else {
+                    return unexpected(call, answer)
+                }
+            }
+        },
+
+        async sendVisit(visit) {
+            const call = "/visits"
+            const answer = await post(call, visit)
+            if (answer === null) {
+                return { ok: false, error: UNAVAILABLE }
+            } else if (answer.status === 200) {
+                const parsed = sent_visit.safeParse(answer.json)
+                if (parsed.success) {
+                    return { ok: true, data: parsed.data }
+                } else {
+                    return unexpected(call, answer)
+                }
+            } else {
+                const parsed = events_refused.safeParse(answer.json)
+                if (parsed.success) {
+                    // What the app sent is wrong, which only a change here
+                    // fixes
+                    console.error("Infra refused a page's events", {
                         call,
                         status: answer.status,
                         refused: parsed.data

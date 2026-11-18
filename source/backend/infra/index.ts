@@ -3,6 +3,7 @@ import type { SignInProof } from "@/utilities/schemas/auth"
 import type {
     events_refused,
     sent_events,
+    sent_visit,
     start_refused,
     started_sign_in,
     verified_sign_in,
@@ -10,14 +11,16 @@ import type {
 } from "./answers"
 import { chooseInfra } from "./choose"
 import type { ServerEvent } from "./events"
+import type { Visit } from "./visits"
 
 // Superforge Infra, the backend services this app runs on, through the one
 // wrapper every route and step calls: never a bare `fetch` to it anywhere
 // else (workbench/writing-code.md, "A call to an outside service"). For now
 // it's sign-in, where Infra emails a visitor a code and a link, and says
 // whether what they brought back is right, and events, what happened in
-// the app, for the owner's dashboard. The app keeps its own users and
-// sessions (backend/auth/). README.md here has the calls.
+// the app, for the owner's dashboard: the pages' and the server's. The app
+// keeps its own users and sessions (backend/auth/). README.md here has the
+// calls.
 
 /** What the app asks of Infra, whichever answers: the real one or the stand-in. */
 export type Infra = {
@@ -51,6 +54,17 @@ export type Infra = {
     sendEvents(
         events: ServerEvent[]
     ): AsyncOperation<SentEvents, EventsRefused | InfraUnavailable>
+    /**
+     * Sends Infra a batch of one visitor's page events, which their page
+     * posted to the app's own /api/visits, with who they are, what they
+     * agreed to and where they are (visits.ts). Infra decides by the app's
+     * mode, their answer and their country whether the app remembers them
+     * and whether the page asks them, and answers both. It's never retried:
+     * events sent twice are kept twice.
+     */
+    sendVisit(
+        visit: Visit
+    ): AsyncOperation<SentVisit, EventsRefused | InfraUnavailable>
 }
 
 // What Infra answers, as the app sees it (answers.ts has each field)
@@ -58,8 +72,9 @@ export type StartedSignIn = z.output<typeof started_sign_in>
 export type StartRefused = z.output<typeof start_refused>
 export type VerifyRefused = z.output<typeof verify_refused>
 export type SentEvents = z.output<typeof sent_events>
+export type SentVisit = z.output<typeof sent_visit>
 export type EventsRefused = z.output<typeof events_refused>
-export type { ServerEvent }
+export type { ServerEvent, Visit }
 
 /**
  * Infra couldn't be asked: no key in a build, a key it refused, or an

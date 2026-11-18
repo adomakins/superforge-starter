@@ -1,13 +1,11 @@
 import { afterEach, beforeEach, expect, onTestFinished, test, vi } from "vitest"
 import { MINUTE, SECOND } from "@/utilities/primitives/durations"
-import type { ConsentSetting } from "../consent"
-import { type DeviceStorage, KEYS, memoryStorage } from "../device"
-import type { Batch } from "../queue"
-import { recorder, SEND_EVERY } from "../record"
+import type { PageBatch, VisitorConsent } from "@/utilities/schemas/visits"
+import { recorder, SEND_EVERY, type Sent } from "../record"
 
-// The recorder on storage, a clock and a sender of the test's own: what
-// goes to Infra before a visitor answers the banner, after they accept and
-// after they decline, and how it's sent
+// The recorder on a clock and senders of the test's own: what goes to the
+// app's /api/visits, how it's sent, when the banner asks, and that nothing
+// is ever kept on the device
 
 const START = 1_763_445_600_000
 
@@ -15,6 +13,9 @@ const LANDING = {
     path: "/pricing",
     url: "https://example.com/pricing?utm_source=newsletter",
     referrer: "https://news.ycombinator.com/",
+    title: "Pricing",
+    screen: { width: 1920, height: 1080 },
+    language: "en-US",
     visible: true
 }
 
@@ -29,6 +30,9 @@ const BUTTON = {
 
 const ERROR = { message: "Boom", source: null, line: null, column: null }
 
+// What the server answers when a test doesn't say: taken, and no asking
+const TAKEN: Sent = { status: 200, ask: false }
+
 beforeEach(() => {
     vi.useFakeTimers()
     vi.spyOn(console, "warn").mockImplementation(() => {})
@@ -38,36 +42,52 @@ beforeEach(() => {
 afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
 })
 
-// A recorder, what it sent, and its clock. `statuses` are Infra's answers,
-// in turn, null for none: 200 once they run out.
+// A promise the test settles itself, for an answer that's still on its way
+function later<Value>() {
+    let settle: (value: Value) => void = () => {}
+    const promise = new Promise<Value>((resolve) => {
+        settle = resolve
+    })
+    return { promise, settle }
+}
+
+// A recorder, what it sent, and its clock. `answers` are the server's
+// answers to each batch, in turn, null for none, or a promise for one still
+// on its way: TAKEN once they run out. `consents` are its answers to the
+// visitor's answers to the banner, in turn: kept once they run out.
 function setup({
-    setting = "ask",
-    storage = memoryStorage(),
-    statuses = []
+    answers = [],
+    consents = []
 }: {
-    setting?: ConsentSetting
-    storage?: DeviceStorage
-    statuses?: (number | null)[]
+    answers?: (Sent | Promise<Sent>)[]
+    consents?: (boolean | Promise<boolean>)[]
 } = {}) {
     let clock = START
-    const calls: { batch: Batch; keepalive: boolean }[] = []
-    const answers = [...statuses]
+    const calls: { batch: PageBatch; keepalive: boolean }[] = []
+    const answered: VisitorConsent[] = []
+    const waiting = [...answers]
+    const waiting_consents = [...consents]
     const visitors = recorder({
-        setting,
-        storage,
         now: () => clock,
         send: async (batch, keepalive) => {
             calls.push({ batch, keepalive })
-            const answer = answers.shift()
-            return answer === undefined ? 200 : answer
+            const answer = waiting.shift()
+            return await (answer === undefined ? TAKEN : answer)
+        },
+        sendConsent: async (consent) => {
+            answered.push(consent)
+            const answer = waiting_consents.shift()
+            return await (answer === undefined ? true : answer)
         }
     })
     onTestFinished(() => visitors.stop())
     return {
         visitors,
         calls,
+        answered,
         // Every event sent, in order
         sent: () => calls.flatMap((call) => call.batch.events),
         tick: (milliseconds: number) => {
@@ -76,134 +96,194 @@ function setup({
     }
 }
 
-test("before a visitor answers, only views, leaves and errors go, anonymous, and nothing is kept", async () => {
-    const storage = memoryStorage()
-    const { visitors, sent } = setup({ storage })
+test("every event goes, with only what happened: who the visitor is, the server says", async () => {
+    const { visitors, sent, calls } = setup()
     visitors.begin(LANDING)
-    visitors.identify("user_42")
     visitors.clicked(BUTTON, LANDING.url)
-    visitors.track("booked-a-call", {})
+    visitors.track("booked-a-call", { plan: "monthly" })
     visitors.failed(ERROR)
-    visitors.navigated("/about")
+    visitors.navigated("/about", "About")
     await vi.advanceTimersByTimeAsync(SEND_EVERY)
 
     expect(sent().map((event) => event.name)).toEqual([
         "view",
+        "click",
+        "booked-a-call",
         "error",
         "leave",
         "view"
     ])
     for (const event of sent()) {
-        expect(event).not.toHaveProperty("visitor")
-        expect(event).not.toHaveProperty("session")
-        expect(event).not.toHaveProperty("user")
+        expect(Object.keys(event).sort()).toEqual([
+            "at",
+            "name",
+            "path",
+            "properties"
+        ])
     }
     expect(sent()[0]).toEqual({
         name: "view",
         at: START,
         path: "/pricing",
         properties: {
+            title: "Pricing",
             referrer: "news.ycombinator.com",
-            utm_source: "newsletter"
+            utm_source: "newsletter",
+            screen: "1920x1080",
+            language: "en-US"
         }
     })
-    expect(visitors.asking()).toBe(true)
-    expect(storage.items.size).toBe(0)
-})
-
-test("once a visitor accepts, every event carries their IDs and who's signed in, clicks and the app's events too", async () => {
-    const storage = memoryStorage()
-    const { visitors, sent } = setup({ storage })
-    visitors.begin(LANDING)
-    visitors.answer("accepted")
-    visitors.identify("user_42")
-    visitors.clicked(BUTTON, LANDING.url)
-    visitors.track("booked-a-call", { plan: "monthly" })
-    await vi.advanceTimersByTimeAsync(SEND_EVERY)
-
-    const [landing, click, booked] = sent()
-    // The view came before the answer, so it stays anonymous
-    expect(landing).not.toHaveProperty("visitor")
-    expect(click).toMatchObject({
-        name: "click",
-        visitor: expect.stringMatching(/^v_/),
-        session: expect.stringMatching(/^s_/),
-        user: "user_42",
-        properties: { target: "book-a-call", text: "Book a call" }
-    })
-    expect(booked).toMatchObject({
-        name: "booked-a-call",
-        visitor: click?.visitor,
-        session: click?.session,
-        properties: { plan: "monthly" }
-    })
-    expect(visitors.asking()).toBe(false)
-    expect(storage.items.get(KEYS.consent)).toBe('"accepted"')
-    expect(storage.items.has(KEYS.visitor)).toBe(true)
-})
-
-test("an answer is remembered, so the banner asks once", () => {
-    const storage = memoryStorage()
-    setup({ storage }).visitors.answer("declined")
-    const later = setup({ storage })
-    expect(later.visitors.asking()).toBe(false)
-})
-
-test("declining keeps only the answer, and what's waiting loses its IDs and clicks", async () => {
-    const storage = memoryStorage()
-    const { visitors, sent } = setup({ storage })
-    visitors.answer("accepted")
-    visitors.begin(LANDING)
-    visitors.clicked(BUTTON, LANDING.url)
-    visitors.answer("declined")
-    await vi.advanceTimersByTimeAsync(SEND_EVERY)
-
-    expect(sent()).toHaveLength(1)
-    expect(sent()[0]).toEqual({
+    expect(sent()[5]).toEqual({
         name: "view",
         at: START,
-        path: "/pricing",
-        properties: expect.any(Object)
+        path: "/about",
+        properties: { title: "About" }
     })
-    expect([...storage.items.keys()]).toEqual([KEYS.consent])
-    expect(storage.items.get(KEYS.consent)).toBe('"declined"')
+    expect(calls[0]?.batch.sent_at).toBe(START)
 })
 
-test("assuming consent remembers from the first view and never asks, unless the visitor once declined", async () => {
-    const { visitors, sent } = setup({ setting: "assume" })
+test("nothing is kept on the device, whatever happens on the page", async () => {
+    // Every way a page keeps something, each noting what touches it
+    const touched: string[] = []
+    function noting(name: string) {
+        return new Proxy(
+            {},
+            {
+                get(_target, property) {
+                    touched.push(`${name}.${String(property)}`)
+                    return undefined
+                },
+                set(_target, property) {
+                    touched.push(`${name}.${String(property)}`)
+                    return true
+                }
+            }
+        )
+    }
+    for (const name of [
+        "localStorage",
+        "sessionStorage",
+        "indexedDB",
+        "caches",
+        "document"
+    ]) {
+        vi.stubGlobal(name, noting(name))
+    }
+
+    const { visitors, sent } = setup({ answers: [null] })
+    visitors.begin(LANDING)
+    visitors.clicked(BUTTON, LANDING.url)
+    visitors.track("booked-a-call", {})
+    await vi.advanceTimersByTimeAsync(SEND_EVERY)
+    visitors.hidden()
+    visitors.shown()
+    visitors.answer("given")
+    await vi.advanceTimersByTimeAsync(SEND_EVERY)
+
+    expect(sent().length).toBeGreaterThan(0)
+    expect(touched).toEqual([])
+})
+
+test("the banner asks when the server's latest answer says to, and stops when it says not to", async () => {
+    const { visitors } = setup({
+        answers: [
+            { status: 200, ask: true },
+            { status: 200, ask: true },
+            { status: 200, ask: false }
+        ]
+    })
+    const changed = vi.fn()
+    visitors.onAskingChange(changed)
     expect(visitors.asking()).toBe(false)
+
     visitors.begin(LANDING)
     await vi.advanceTimersByTimeAsync(SEND_EVERY)
-    expect(sent()[0]?.visitor).toMatch(/^v_/)
+    expect(visitors.asking()).toBe(true)
 
-    const storage = memoryStorage()
-    storage.setItem(KEYS.consent, '"declined"')
-    const declined = setup({ setting: "assume", storage })
-    declined.visitors.begin(LANDING)
+    visitors.navigated("/about", "About")
     await vi.advanceTimersByTimeAsync(SEND_EVERY)
-    expect(declined.sent()[0]).not.toHaveProperty("visitor")
+    expect(visitors.asking()).toBe(true)
+
+    visitors.navigated("/contact", "Contact")
+    await vi.advanceTimersByTimeAsync(SEND_EVERY)
+    expect(visitors.asking()).toBe(false)
+    // Once as it began asking, once as it stopped
+    expect(changed).toHaveBeenCalledTimes(2)
 })
 
-test("a visit ends after half an hour with nothing happening", async () => {
-    const { visitors, sent, tick } = setup({ setting: "assume" })
+test("a failed or refused batch leaves the banner as it was", async () => {
+    const { visitors } = setup({
+        answers: [{ status: 200, ask: true }, { status: 400, ask: false }, null]
+    })
     visitors.begin(LANDING)
-    tick(29 * MINUTE)
-    visitors.navigated("/about")
-    tick(31 * MINUTE)
-    visitors.navigated("/contact")
     await vi.advanceTimersByTimeAsync(SEND_EVERY)
+    visitors.navigated("/about", "About")
+    await vi.advanceTimersByTimeAsync(SEND_EVERY)
+    visitors.navigated("/contact", "Contact")
+    await vi.advanceTimersByTimeAsync(SEND_EVERY)
+    expect(visitors.asking()).toBe(true)
+})
 
-    const sessions = sent().map((event) => [event.name, event.session])
-    const [first, second] = [...new Set(sessions.map(([, id]) => id))]
-    expect(sessions).toEqual([
-        ["view", first],
-        ["leave", first],
-        ["view", first],
-        // The leave belongs to the visit its view was in
-        ["leave", first],
-        ["view", second]
-    ])
-    expect(second).not.toBe(first)
+test("answering hides the banner at once and sends the answer, and a batch the server answered before it knew can't ask again", async () => {
+    const first = later<Sent>()
+    const consent = later<boolean>()
+    const second = later<Sent>()
+    const { visitors, answered } = setup({
+        answers: [
+            { status: 200, ask: true },
+            first.promise,
+            second.promise,
+            { status: 200, ask: true }
+        ],
+        consents: [consent.promise]
+    })
+    visitors.begin(LANDING)
+    await vi.advanceTimersByTimeAsync(SEND_EVERY)
+    expect(visitors.asking()).toBe(true)
+
+    // A batch on its way as the visitor answers
+    visitors.navigated("/about", "About")
+    await vi.advanceTimersByTimeAsync(SEND_EVERY)
+    visitors.answer("given")
+    expect(visitors.asking()).toBe(false)
+    expect(answered).toEqual(["given"])
+    first.settle({ status: 200, ask: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(visitors.asking()).toBe(false)
+
+    // A batch sent while the answer is on its way
+    visitors.navigated("/contact", "Contact")
+    await vi.advanceTimersByTimeAsync(SEND_EVERY)
+    second.settle({ status: 200, ask: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(visitors.asking()).toBe(false)
+
+    // Once the server has it, its answers count again, as when the owner
+    // has since changed whom the site asks
+    consent.settle(true)
+    visitors.navigated("/", "Home")
+    await vi.advanceTimersByTimeAsync(SEND_EVERY)
+    expect(visitors.asking()).toBe(true)
+})
+
+test("an answer the server didn't keep is asked for again by the next batch", async () => {
+    const { visitors, answered } = setup({
+        answers: [
+            { status: 200, ask: true },
+            { status: 200, ask: true }
+        ],
+        consents: [false]
+    })
+    visitors.begin(LANDING)
+    await vi.advanceTimersByTimeAsync(SEND_EVERY)
+    visitors.answer("declined")
+    expect(visitors.asking()).toBe(false)
+    await vi.advanceTimersByTimeAsync(0)
+
+    visitors.navigated("/about", "About")
+    await vi.advanceTimersByTimeAsync(SEND_EVERY)
+    expect(answered).toEqual(["declined"])
+    expect(visitors.asking()).toBe(true)
 })
 
 test("a page is viewed once as it lands, then once for each new path", async () => {
@@ -211,9 +291,9 @@ test("a page is viewed once as it lands, then once for each new path", async () 
     visitors.begin(LANDING)
     // A dev server's strict mode starts it twice
     visitors.begin(LANDING)
-    visitors.navigated("/pricing")
-    visitors.navigated("/pricing?plan=yearly")
-    visitors.navigated("/about")
+    visitors.navigated("/pricing", "Pricing")
+    visitors.navigated("/pricing?plan=yearly", "Pricing")
+    visitors.navigated("/about", "")
     await vi.advanceTimersByTimeAsync(SEND_EVERY)
 
     expect(sent().map((event) => [event.name, event.path])).toEqual([
@@ -221,6 +301,7 @@ test("a page is viewed once as it lands, then once for each new path", async () 
         ["leave", "/pricing"],
         ["view", "/about"]
     ])
+    // A page with no title says none
     expect(sent()[2]?.properties).toEqual({})
 })
 
@@ -236,7 +317,7 @@ test("a leave says how far down the page went, and how long it was visible", asy
     tick(MINUTE)
     visitors.shown()
     tick(3 * SECOND)
-    visitors.navigated("/about")
+    visitors.navigated("/about", "About")
     await vi.advanceTimersByTimeAsync(SEND_EVERY)
 
     const leaves = sent().filter((event) => event.name === "leave")
@@ -258,7 +339,7 @@ test("a page sends its first ten errors", async () => {
     for (let error = 0; error < 15; error++) {
         visitors.failed(ERROR)
     }
-    visitors.navigated("/about")
+    visitors.navigated("/about", "About")
     visitors.failed(ERROR)
     await vi.advanceTimersByTimeAsync(SEND_EVERY)
     const errors = sent().filter((event) => event.name === "error")
@@ -267,7 +348,7 @@ test("a page sends its first ten errors", async () => {
 })
 
 test("the app's events are checked as Infra checks them, and never take the script's names", async () => {
-    const { visitors, sent } = setup({ setting: "assume" })
+    const { visitors, sent } = setup()
     visitors.begin(LANDING)
     visitors.track("Booked a call", {})
     visitors.track("view", {})
@@ -278,16 +359,8 @@ test("the app's events are checked as Infra checks them, and never take the scri
     expect(console.warn).toHaveBeenCalledTimes(3)
 })
 
-test("an email is never who's signed in", async () => {
-    const { visitors, sent } = setup({ setting: "assume" })
-    visitors.identify("ada@example.com")
-    visitors.begin(LANDING)
-    await vi.advanceTimersByTimeAsync(SEND_EVERY)
-    expect(sent()[0]).not.toHaveProperty("user")
-})
-
 test("events go every five seconds, at most 100 a call", async () => {
-    const { visitors, calls } = setup({ setting: "assume" })
+    const { visitors, calls } = setup()
     visitors.begin(LANDING)
     for (let event = 0; event < 249; event++) {
         visitors.track("tried", {})
@@ -301,13 +374,15 @@ test("events go every five seconds, at most 100 a call", async () => {
     expect(calls.every((call) => !call.keepalive)).toBe(true)
 })
 
-test("a batch Infra refuses is dropped, and one it couldn't take is tried again, later each time", async () => {
-    const refused = setup({ statuses: [400] })
+test("a batch the server refuses is dropped, and one it couldn't take is tried again, later each time", async () => {
+    const refused = setup({ answers: [{ status: 400, ask: false }] })
     refused.visitors.begin(LANDING)
     await vi.advanceTimersByTimeAsync(10 * MINUTE)
     expect(refused.calls).toHaveLength(1)
 
-    const down = setup({ statuses: [null, 503, 200] })
+    const down = setup({
+        answers: [null, { status: 503, ask: false }, TAKEN]
+    })
     down.visitors.begin(LANDING)
     await vi.advanceTimersByTimeAsync(SEND_EVERY)
     expect(down.calls).toHaveLength(1)
@@ -325,80 +400,20 @@ test("a batch Infra refuses is dropped, and one it couldn't take is tried again,
     expect(down.calls).toHaveLength(3)
 })
 
-test("while Infra is down, what a remembered visitor's page couldn't send waits on the device for the next", async () => {
-    const storage = memoryStorage()
-    const first = setup({ setting: "assume", storage, statuses: [null] })
-    first.visitors.begin(LANDING)
-    await vi.advanceTimersByTimeAsync(SEND_EVERY)
-    first.visitors.hidden()
-    expect(first.calls).toHaveLength(1)
-    expect(storage.items.has(KEYS.waiting)).toBe(true)
-
-    const next = setup({ setting: "assume", storage })
-    next.visitors.begin({ ...LANDING, path: "/about" })
-    await vi.advanceTimersByTimeAsync(SEND_EVERY)
-    expect(next.sent().map((event) => [event.name, event.path])).toEqual([
-        ["view", "/pricing"],
-        ["leave", "/pricing"],
-        ["view", "/about"]
-    ])
-    expect(storage.items.has(KEYS.waiting)).toBe(false)
-})
-
-test("an anonymous visitor's page tries once more as it hides, and keeps nothing", async () => {
-    const storage = memoryStorage()
-    const { visitors, calls } = setup({ storage, statuses: [null] })
+test("while the server is down, a hiding page tries once more, and what didn't go waits in memory for the page's return", async () => {
+    const { visitors, calls } = setup({ answers: [null, null] })
     visitors.begin(LANDING)
     await vi.advanceTimersByTimeAsync(SEND_EVERY)
     visitors.hidden()
+    await vi.advanceTimersByTimeAsync(0)
     expect(calls.map((call) => call.keepalive)).toEqual([false, true])
-    expect(storage.items.size).toBe(0)
-})
 
-test("declining in another tab holds in this one at once, and what's waiting here loses its IDs", async () => {
-    const storage = memoryStorage()
-    const here = setup({ storage })
-    here.visitors.answer("accepted")
-    here.visitors.begin(LANDING)
-    here.visitors.clicked(BUTTON, LANDING.url)
-
-    setup({ storage }).visitors.answer("declined")
-    here.visitors.storageChanged()
-    here.visitors.navigated("/about")
-    await vi.advanceTimersByTimeAsync(SEND_EVERY)
-
-    expect(here.sent().map((event) => event.name)).toEqual([
+    // After the wait two failures call for
+    visitors.shown()
+    await vi.advanceTimersByTimeAsync(4 * SEND_EVERY)
+    expect(calls).toHaveLength(3)
+    expect(calls[2]?.batch.events.map((event) => event.name)).toEqual([
         "view",
-        "leave",
-        "view"
+        "leave"
     ])
-    for (const event of here.sent()) {
-        expect(event).not.toHaveProperty("visitor")
-    }
-    expect([...storage.items.keys()]).toEqual([KEYS.consent])
-})
-
-test("once the site's data is cleared, nothing is kept again until the visitor answers again", async () => {
-    const storage = memoryStorage()
-    const { visitors, sent } = setup({ storage })
-    visitors.answer("accepted")
-    storage.items.clear()
-    visitors.begin(LANDING)
-    await vi.advanceTimersByTimeAsync(SEND_EVERY)
-    expect(sent()[0]).not.toHaveProperty("visitor")
-    expect(storage.items.size).toBe(0)
-    expect(visitors.asking()).toBe(true)
-})
-
-test("an answer the device refuses to keep still holds for the page", () => {
-    const refusing: DeviceStorage = {
-        getItem: () => null,
-        setItem: () => {
-            throw new DOMException("Full", "QuotaExceededError")
-        },
-        removeItem: () => {}
-    }
-    const { visitors } = setup({ storage: refusing })
-    visitors.answer("declined")
-    expect(visitors.asking()).toBe(false)
 })

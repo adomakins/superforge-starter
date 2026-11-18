@@ -1,20 +1,10 @@
-import { expect, test, vi } from "vitest"
-import { WEEK } from "@/utilities/primitives/durations"
-import { KEYS, memoryStorage } from "../device"
-import {
-    BATCH_BYTES,
-    EVENTS_A_CALL,
-    keepWaiting,
-    type PageEvent,
-    QUEUE_LIMIT,
-    queued,
-    takeBatch,
-    takeWaiting
-} from "../queue"
+import { expect, test } from "vitest"
+import { EVENTS_A_CALL } from "@/utilities/schemas/events"
+import type { PageEvent } from "@/utilities/schemas/visits"
+import { BATCH_BYTES, QUEUE_LIMIT, queued, takeBatch } from "../queue"
 
-// The events waiting to be sent: a call's worth at a time, under Infra's
-// limits, at most 500 kept, and what a page couldn't send kept on the
-// device for the next
+// The events waiting to be sent, in the page's memory: a call's worth at a
+// time, under the route's and Infra's limits, and at most 500 kept
 
 const NOW = 1_763_445_600_000
 
@@ -80,30 +70,4 @@ test("past 500 waiting, the oldest are dropped", () => {
     expect(now).toHaveLength(QUEUE_LIMIT)
     expect(now[0]?.at).toBe(NOW + 2)
     expect(now.at(-1)?.at).toBe(NOW + 1001)
-})
-
-test("what's kept waiting is taken once, by the next page", () => {
-    const storage = memoryStorage()
-    keepWaiting(storage, [event(NOW - 1000)], NOW)
-    keepWaiting(storage, [event(NOW)], NOW)
-    expect(takeWaiting(storage, NOW)).toEqual([event(NOW - 1000), event(NOW)])
-    expect(storage.items.has(KEYS.waiting)).toBe(false)
-    expect(takeWaiting(storage, NOW)).toEqual([])
-})
-
-test("what's kept waiting drops a week-old event, and one in another shape", () => {
-    vi.spyOn(console, "debug").mockImplementation(() => {})
-    const storage = memoryStorage()
-    storage.setItem(
-        KEYS.waiting,
-        JSON.stringify([
-            event(NOW - WEEK - 1),
-            { name: "View!", at: NOW, path: "/", properties: {} },
-            event(NOW)
-        ])
-    )
-    expect(takeWaiting(storage, NOW)).toEqual([event(NOW)])
-
-    storage.setItem(KEYS.waiting, "{ not json")
-    expect(takeWaiting(storage, NOW)).toEqual([])
 })

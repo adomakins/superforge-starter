@@ -60,72 +60,91 @@ something already there works, which its notes flag.
 Visitors, on Superforge Infra: what visitors view, click and run into on
 the site's pages, and what only the server knows, kept by Infra as events,
 which superforge.studio's dashboard sums up in its Infra tab and Claude
-reads in full through the Superforge MCP. A visitor is asked first, unless
-the owner chooses otherwise.
+reads in full through the Superforge MCP. Every event reaches Infra from
+the app's own server: the pages send theirs to the app's `/api/visits`,
+never to Infra, and keep nothing on the device. A visitor is remembered
+by a first-party cookie the server sets, and asked first where the owner
+chooses.
 
 - **The pages' events**, machinery: `source/frontend/visitors/`, a script
   of the app's own, started by the root route from an effect, so never in
   the prerender (`routes/__root.tsx`'s `startVisitors`). It records
-  `view` on each page the router resolves (with the referring site and
-  the campaign on the first), `leave` (how far down, how long visible),
-  `click` on links, buttons and anything with `data-track`, and `error`,
-  ten a page; it never keeps a query string, a fragment, a field's value
-  or an email address. It sends with `fetch`, as plain text, every five
-  seconds and with `keepalive` as the page hides, to
-  `/v1/projects/<project_id>/events`, the `project_id` the Superforge
-  MCP's `create_project` writes into `.superforge/superforge.json`;
-  without one it does nothing. A dev server sends nothing and logs each
-  batch with `console.debug`. No file or address holds a word ad
-  blockers' lists match. `track()` sends the app's own events and
-  `identify()` puts the signed-in person's user ID on them; the dashboard
-  (`routes/dashboard/route.tsx`) and signing in and out
-  (`queries/auth.ts`) call it. The dashboard is `data-private`, so its
-  clicks send no text. Its README has the rest.
-- **Consent**, machinery with the owner's setting: `CONSENT` in
-  `source/frontend/visitors/consent.ts`. `"ask"`, as it ships: until a
-  visitor accepts, and after they decline, nothing is kept on their
-  device, and only `view`, `leave` and `error` go, with no IDs. Once
-  they accept, a lasting visitor ID, a visit's ID (a new one after 30
-  idle minutes) and what couldn't be sent yet are kept in localStorage,
-  and their clicks and the app's events go too. `"assume"`: no banner,
-  remembered from the first visit.
+  `view` on each page the router resolves, with the page's `title`, and
+  on the first the referring site, every `utm_` parameter (the first
+  ten), an ad's click ID (`gclid`, `gbraid`, `wbraid`, `fbclid`,
+  `msclkid`, `ttclid`, `li_fat_id`), `screen` and `language`; `leave`
+  (how far down, how long visible); `click` on links, buttons and
+  anything with `data-track`; and `error`, ten a page. It never keeps a
+  query string, a fragment, a field's value or an email address. It
+  posts JSON to the app's own `/api/visits`, same-origin with its
+  cookies, every five seconds and with `keepalive` as the page hides,
+  through the API's typed client, and keeps nothing on the device: no
+  ID, no visit, no answer and no queue, which lives in the page's memory.
+  `track()` sends the app's own events. The dashboard is `data-private`,
+  so its clicks send no text. Its README has the rest.
+- **`/api/visits`**, machinery: `source/backend/visits/`. `POST
+  /api/visits` takes a page's batch (`utilities/schemas/visits.ts`, at
+  most 64 KB), adds the visitor (the ID in their `visitor` cookie or a
+  new UUID, none in `never`; their answer from `visitor_consent`, or
+  `unasked`; the signed-in user's ID from the session; `X-Real-IP`; and
+  `User-Agent`) and the mode, and sends it to Infra. As Infra answers, it
+  sets or renews `visitor` for a remembered visitor, clears it for one
+  who isn't, and answers the page `{ ask }`; when Infra is down or
+  refuses, it answers `{ ask: false }`, logs it, and changes no cookie.
+  `POST /api/visits/consent` keeps `{ consent: "given" | "declined" }`
+  in `visitor_consent`, clears `visitor` on `declined`, and answers 204.
+  Both cookies are `HttpOnly`, `SameSite=Lax`, `Path=/`, for 400 days,
+  and `Secure` but on plain http on this computer (`cookies.ts`).
+- **Whom the site remembers**, machinery with the owner's setting:
+  `VISITOR_MODE` in `source/utilities/visitors.ts`, on
+  `context.var.visitor_mode`. `"remember"`, as it ships: everyone who
+  hasn't declined, with no banner. `"ask-in-eu"`: asks visitors where
+  GDPR applies, or whom Infra can't place, and remembers everyone else.
+  `"ask"`: asks everyone, and remembers whoever accepts. `"never"`: no
+  one, and no cookie. Infra applies it by the visitor's answer and
+  country; whoever isn't remembered is counted a day at a time.
 - **The consent banner**, a starting point:
   `source/frontend/components/site/consent-banner.tsx`, drawn by the root
-  route on every page, the dashboard's too, only in a browser and only
-  while it asks. A copy may restyle it and reword it in its own voice.
-- **Server events**, machinery: `sendEvents` on `Infra`
-  (`backend/infra/index.ts`), `POST /v1/events` with the key
-  (`client.ts`), checked as Infra checks it and kept by no one in the
-  stand-in (`stand-in.ts`, which answers `{ kept: 0 }`, as a test key
-  does), with the event's shape in `backend/infra/events.ts` and the
-  answers in `answers.ts`. It never throws, and a failure is logged.
-  An event's field rules, which the pages share, are in
-  `source/utilities/schemas/events.ts`. `INFRA_URL`, Infra's address,
-  moves from `backend/infra/client.ts` to `source/utilities/infra.ts`,
-  since the pages send there too.
+  route on every page, the dashboard's too, only in a browser, and only
+  while the server's latest answer said `ask`. Accept and Decline post
+  to `/api/visits/consent`. A copy may restyle it and reword it in its
+  own voice.
+- **Infra's calls for events**, machinery: on `Infra`
+  (`backend/infra/index.ts`), `sendVisit`, `POST /v1/visits` with the
+  key, for the pages' batches (`visits.ts`, and `sent_visit` in
+  `answers.ts`), and `sendEvents`, `POST /v1/events`, for the server's
+  own, with the event's shape in `events.ts`. Each is checked as Infra
+  checks it in the stand-in (`stand-in.ts`), which keeps nothing and
+  answers a page's batch by the mode as Infra answers a visitor it can't
+  place, so `ask-in-eu` asks as `ask` does, and logs each in a dev
+  server. Neither throws or retries, and a failure is logged. An
+  event's field rules and limits, which both sides share, are in
+  `source/utilities/schemas/events.ts`.
 - **The sample event**, a starting point: `signed-up`, with the new user's
   ID, which `backend/auth/routes.ts` sends without waiting on it when a
   sign-in makes someone new (`tellInfraOfSignUp`), so a slow or failing
   Infra never holds signing in up.
 - **Docs**: `source/frontend/visitors/README.md`,
   `source/backend/infra/README.md` ("Events"), `START-HERE.md` (step 1's
-  question 13, and step 3 sets `CONSENT`), `CLAUDE.md` and `README.md`.
+  question 13, and step 3 sets `VISITOR_MODE`), `CLAUDE.md` and
+  `README.md`.
 
 Flags:
 
-- **Owner**: whether to keep the banner: keep `"ask"` if any customers
-  are in the EU or the UK, or if they aren't sure (`START-HERE.md`'s
-  question 13). The events are kept only once the copy has a
-  `project_id` in `.superforge/superforge.json` and its domains are
-  listed on the dashboard's Infra tab.
+- **Owner**: whom the site remembers (`START-HERE.md`'s question 13):
+  `"remember"`, as it ships, sets a lasting cookie on every visitor with
+  no banner, which the EU and the UK generally require consent for; a
+  business based in the EU chooses `"ask"`, and one elsewhere that cares
+  `"ask-in-eu"`. Events are kept only once the copy's server has
+  `INFRA_SECRET_KEY`.
 - **A change in how something works**: every object that is an `Infra`,
-  like a test's fake of it, needs a `sendEvents`, as
-  `backend/auth/tests/routes.test.ts`'s do; and code that imported
-  `INFRA_URL` from `backend/infra/client.ts` imports it from
-  `@/utilities/infra`.
+  like a test's fake of it, needs a `sendEvents` and a `sendVisit`, as
+  `backend/auth/tests/routes.test.ts`'s do; `standInInfra` takes
+  `{ waiting, logs }`; and every `ApiEnvironment` has a `visitor_mode`,
+  which `testApi()` gives `"remember"` unless a test says otherwise.
 
-How to tell a copy already has it: `source/frontend/visitors/consent.ts`
-exists, and `Infra` in `source/backend/infra/index.ts` has `sendEvents`.
+How to tell a copy already has it: `source/backend/visits/routes.ts`
+exists, and `Infra` in `source/backend/infra/index.ts` has `sendVisit`.
 
 ## 0.3.0 (2026-11-16)
 

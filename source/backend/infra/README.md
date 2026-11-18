@@ -55,11 +55,78 @@ work. A test key's sign-ins have none.
 Infra keeps what happened in the app, for the owner: superforge.studio's
 dashboard sums it up in its Infra tab (visitors, top pages, where they
 came from, errors, sign-ins), and Claude reads it in full through the
-Superforge MCP. Most of it comes from the pages, which send it to Infra
-themselves with the project's public ID, no key, from the project's
-domains (`frontend/visitors/README.md`). The server sends what only it
-knows, like a sign-up, a booking or a payment, through
-`context.var.infra.sendEvents`, `POST /v1/events` with the key:
+Superforge MCP. **Every event reaches Infra from the app's server, with
+its key**: the pages send theirs to the app's own address, never to
+Infra. Only a secret key's events are kept: a test key's, and the
+stand-in's, are checked and dropped.
+
+### The pages': `sendVisit`
+
+The pages' script (`frontend/visitors/README.md`) posts its batches to
+the app's own `POST /api/visits` (`backend/visits/routes.ts`), which adds
+who the visitor is and calls `context.var.infra.sendVisit`,
+`POST /v1/visits` with the key:
+
+```ts
+context.var.infra.sendVisit({
+    mode: "remember",
+    visitor: {
+        id: "2f1c8e64-7b5a-4f2e-9c3d-8a6b1e0f4d27",
+        consent: "unasked",
+        user: null,
+        ip: "203.0.113.9",
+        user_agent: "Mozilla/5.0 (iPhone; …)"
+    },
+    sent_at: 1763445600000,
+    events: [
+        { name: "view", at: 1763445598000, path: "/pricing", properties: {} }
+    ]
+})
+```
+
+- `mode` is `VISITOR_MODE` (`utilities/visitors.ts`): `remember`,
+  `ask-in-eu`, `ask` or `never`.
+- `visitor.id` is the ID in the visitor's `visitor` cookie, or a new
+  UUID the app would set; null in `never` mode.
+- `visitor.consent` is their answer to the banner, from the
+  `visitor_consent` cookie: `unasked`, `given` or `declined`.
+- `visitor.user` is the signed-in user's ID, from the app's own session,
+  or null. Infra keeps it only of a visitor it remembers.
+- `visitor.ip` is Railway's `X-Real-IP` (`auth/visitor.ts`), for their
+  country and to count a visitor who isn't remembered, and
+  `visitor.user_agent` their `User-Agent`, for bots and their device.
+  Infra keeps neither.
+- `sent_at` and `events` are the page's batch as it sent it: at most 100
+  events, in at most 64 KB (`utilities/schemas/visits.ts`).
+
+Infra decides, by the mode, the answer and the country, whether the app
+remembers the visitor and whether the page asks them:
+
+| `mode`      | Remembered                                                                      | Asked                   |
+| ----------- | ------------------------------------------------------------------------------- | ----------------------- |
+| `remember`  | Everyone who hasn't declined                                                    | Nobody                  |
+| `ask-in-eu` | As `ask` where GDPR applies, or the country is unknown; as `remember` elsewhere | As `ask`, there         |
+| `ask`       | Whoever gave their consent                                                      | Whoever hasn't answered |
+| `never`     | Nobody                                                                          | Nobody                  |
+
+| Infra answers                                     | The wrapper's result                   | `/api/visits` does                                                      |
+| ------------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------- |
+| 200 `{ kept, remembered, ask }`                   | `ok`, with `kept`, `remembered`, `ask` | Sets or renews `visitor` when remembered, clears it when not; `{ ask }` |
+| 400 `invalid`, the `fields` that failed           | `invalid`, `fields`, logged            | `{ ask: false }`, logged, no cookie changed: the batch is lost          |
+| 413 `too-large`                                   | `too-large`, `limit`, logged           | The same                                                                |
+| 401 (a key it refused), anything else, or nothing | `unavailable`, logged                  | The same                                                                |
+
+A batch that reached the app's server is never sent again, since events
+sent twice are kept twice. The stand-in answers by the same table, for a
+visitor whose country is unknown, as everyone's is there, so
+`ask-in-eu` asks as `ask` does; it keeps nothing, and in a dev server it
+logs each batch.
+
+### The server's: `sendEvents`
+
+The server sends what only it knows, like a sign-up, a booking or a
+payment, through `context.var.infra.sendEvents`, `POST /v1/events` with
+the key:
 
 ```ts
 context.var.infra.sendEvents([
@@ -105,10 +172,8 @@ once as it's made:
 | Secret key, `sf_secret_…` | `INFRA_SECRET_KEY` on the app's service in Railway (`.railway/railway.ts`) | sent by email, for real                                      |
 | Test key, `sf_test_…`     | `INFRA_TEST_KEY` in the checkout's `.env` (`.env.example`)                 | not sent: Infra answers the code, which the dev server shows |
 
-A test key's events are checked and none is kept. The pages' events need
-no key: they go with the project's public ID, `sf_project_…`, the
-`project_id` in `.superforge/superforge.json`, which the Superforge MCP's
-`create_project` writes there.
+A test key's events are checked and none is kept, the pages' too, which
+go through the server like everything else.
 
 Which one the server uses is decided once, as it starts (`choose.ts`):
 
@@ -127,8 +192,8 @@ Which one the server uses is decided once, as it starts (`choose.ts`):
 
 `INFRA_URL` points the server at another Infra, like a Superforge
 checkout's own dev server (`http://infra.localhost:3002/v1`), to work on
-both at once. The pages always send to the real one
-(`source/utilities/infra.ts`), and a dev server's send nothing.
+both at once; without it, the server calls the real one (`INFRA_URL` in
+`client.ts`).
 
 ## In this folder
 
@@ -138,10 +203,13 @@ both at once. The pages always send to the real one
   types come from.
 - `events.ts`: an event from the server, checked as Infra checks it, with
   the field rules the pages share (`utilities/schemas/events.ts`).
+- `visits.ts`: a batch of a page's events, with its visitor and the
+  app's mode, checked as Infra checks it.
 - `client.ts`: Infra over HTTP with a key, its answers parsed with them.
   No call is retried: a second start would send a second email, and
   events sent again are kept twice.
-- `stand-in.ts`: Infra's test mode, in memory.
+- `stand-in.ts`: Infra's test mode, in memory, which answers a page's
+  events by the app's mode as Infra answers a visitor it can't place.
 - `choose.ts`: which of them the server uses, and reading a checkout's
   `.env`.
 
