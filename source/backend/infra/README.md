@@ -5,7 +5,8 @@ Superforge Infra is the backend services this app runs on, at
 app calls it through: a route or a workflow's step calls
 `context.var.infra`, never a bare `fetch` to Infra
 (`workbench/writing-code.md`, "A call to an outside service"). For now
-Infra does one thing for the app: sign-in.
+Infra does two things for the app: sign-in, and keeping its events, what
+happened in it, for the owner's dashboard.
 
 ## Sign-in
 
@@ -49,6 +50,48 @@ minute apart; 20 from one visitor's network; 300 from the project. They
 hold back abuse, not a busy day, and a refusal says when asking again can
 work. A test key's sign-ins have none.
 
+## Events
+
+Infra keeps what happened in the app, for the owner: superforge.studio's
+dashboard sums it up in its Infra tab (visitors, top pages, where they
+came from, errors, sign-ins), and Claude reads it in full through the
+Superforge MCP. Most of it comes from the pages, which send it to Infra
+themselves with the project's public ID, no key, from the project's
+domains (`frontend/visitors/README.md`). The server sends what only it
+knows, like a sign-up, a booking or a payment, through
+`context.var.infra.sendEvents`, `POST /v1/events` with the key:
+
+```ts
+context.var.infra.sendEvents([
+    { name: "booked-a-call", user: user.id, properties: { plan: "monthly" } }
+])
+```
+
+An event is a `name`, lowercase words joined by hyphens, and whatever's
+known of it: `at`, a `Date`, now when it's left out; `user`, the app's own
+ID for whoever did it, **never their email** (Infra keeps no app's users);
+`path`; and `properties`, flat, at most 32, each a string of at most 1,000
+characters, a number, a boolean or null. At most 100 a call, in at most
+64 KB (`events.ts`).
+
+| Infra answers                                     | The wrapper's result         |
+| ------------------------------------------------- | ---------------------------- |
+| 200 `{ kept }`, `0` with a test key               | `ok`, with `kept`            |
+| 400 `invalid`, the `fields` that failed           | `invalid`, `fields`, logged  |
+| 413 `too-large`                                   | `too-large`, `limit`, logged |
+| 401 (a key it refused), anything else, or nothing | `unavailable`, logged        |
+
+**An event is never worth failing a request over.** Where a person is
+waiting, send it without waiting on it, and log a failure: `sendEvents`
+never throws, and it isn't retried, since events sent twice are kept
+twice. The template's one, `signed-up`, goes when a sign-in makes
+someone new, with their user's ID (`tellInfraOfSignUp` in
+`backend/auth/routes.ts`). The stand-in checks events as Infra does and
+keeps none, as a test key's are, so a test that sends a wrong one fails.
+
+Infra keeps each sign-in it verifies as a `sign-in` event of its own, so
+the app needn't send one.
+
 ## Keys
 
 Each copy of this codebase is a **project** on Infra, made on
@@ -61,6 +104,11 @@ once as it's made:
 | ------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | Secret key, `sf_secret_…` | `INFRA_SECRET_KEY` on the app's service in Railway (`.railway/railway.ts`) | sent by email, for real                                      |
 | Test key, `sf_test_…`     | `INFRA_TEST_KEY` in the checkout's `.env` (`.env.example`)                 | not sent: Infra answers the code, which the dev server shows |
+
+A test key's events are checked and none is kept. The pages' events need
+no key: they go with the project's public ID, `sf_project_…`, the
+`project_id` in `.superforge/superforge.json`, which the Superforge MCP's
+`create_project` writes there.
 
 Which one the server uses is decided once, as it starts (`choose.ts`):
 
@@ -79,7 +127,8 @@ Which one the server uses is decided once, as it starts (`choose.ts`):
 
 `INFRA_URL` points the server at another Infra, like a Superforge
 checkout's own dev server (`http://infra.localhost:3002/v1`), to work on
-both at once.
+both at once. The pages always send to the real one
+(`source/utilities/infra.ts`), and a dev server's send nothing.
 
 ## In this folder
 
@@ -87,8 +136,11 @@ both at once.
   `appInfra()`, the server's.
 - `answers.ts`: what Infra answers, as zod schemas, which `index.ts`'s
   types come from.
+- `events.ts`: an event from the server, checked as Infra checks it, with
+  the field rules the pages share (`utilities/schemas/events.ts`).
 - `client.ts`: Infra over HTTP with a key, its answers parsed with them.
-  No call is retried: a second start would send a second email.
+  No call is retried: a second start would send a second email, and
+  events sent again are kept twice.
 - `stand-in.ts`: Infra's test mode, in memory.
 - `choose.ts`: which of them the server uses, and reading a checkout's
   `.env`.

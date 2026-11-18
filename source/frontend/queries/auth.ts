@@ -1,6 +1,7 @@
 import { mutationOptions, queryOptions, useQuery } from "@tanstack/react-query"
 import type { InferResponseType } from "hono/client"
 import { client } from "@/backend/client"
+import { identify } from "@/frontend/visitors"
 import type { SignInProof } from "@/utilities/schemas/auth"
 import { FailedRequest, readFailure } from "./failures"
 
@@ -88,6 +89,7 @@ export const verifySignIn = mutationOptions({
         // would put the visitor back
         await context.client.cancelQueries({ queryKey: sessionQuery.queryKey })
         context.client.setQueryData(sessionQuery.queryKey, user)
+        identify(user.id)
     }
 })
 
@@ -106,5 +108,7 @@ export const signOut = mutationOptions({
         await context.client.cancelQueries()
         context.client.removeQueries()
         context.client.setQueryData(sessionQuery.queryKey, null)
+        // The visitors' events stop carrying who it was (frontend/visitors/)
+        identify(null)
     }
 })

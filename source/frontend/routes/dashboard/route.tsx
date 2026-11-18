@@ -4,10 +4,12 @@ import {
     Outlet,
     useLocation
 } from "@tanstack/react-router"
+import { useEffect } from "react"
 import { DashboardBar } from "@/frontend/components/dashboard/shell"
 import { BusinessMark } from "@/frontend/components/site/business-mark"
 import { SignInForm } from "@/frontend/components/site/sign-in-form"
 import { useSession } from "@/frontend/queries/auth"
+import { identify } from "@/frontend/visitors"
 import { isInternal } from "@/utilities/schemas/users"
 
 /**
@@ -31,6 +33,14 @@ export const Route = createFileRoute("/dashboard")({
 function Dashboard() {
     const session = useSession()
     const { pathname } = useLocation()
+    // The visitors' events carry who's signed in, by their user's ID
+    // (frontend/visitors/), from here until they sign out
+    const user_id = session.status === "signed-in" ? session.user.id : null
+    useEffect(() => {
+        if (session.status !== "loading") {
+            identify(user_id)
+        }
+    }, [session.status, user_id])
     if (session.status === "loading") {
         return <Loading />
     } else if (session.status === "signed-out") {
@@ -42,8 +52,10 @@ function Dashboard() {
         // Everyone else's dashboard is their account
         return <Navigate to="/dashboard/account" replace />
     }
+    // `data-private`: the dashboard shows people's names and the
+    // business's own data, so a click here never sends the text it showed
     return (
-        <div className="flex h-dvh min-h-[32rem] flex-col">
+        <div data-private className="flex h-dvh min-h-[32rem] flex-col">
             <DashboardBar user={session.user} internal={internal} />
             <Outlet />
         </div>

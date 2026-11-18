@@ -3,10 +3,13 @@ import {
     createRootRouteWithContext,
     HeadContent,
     Outlet,
-    Scripts
+    Scripts,
+    useRouter
 } from "@tanstack/react-router"
-import type { ReactNode } from "react"
+import { type ReactNode, useEffect } from "react"
+import { ConsentBanner } from "@/frontend/components/site/consent-banner"
 import appCss from "@/frontend/styles.css?url"
+import { startVisitors } from "@/frontend/visitors"
 
 export const Route = createRootRouteWithContext<{
     queryClient: QueryClient
@@ -35,12 +38,18 @@ export const Route = createRootRouteWithContext<{
     component: Root
 })
 
-// Every page's queries share the router's query cache (router.tsx)
+// Every page's queries share the router's query cache (router.tsx). Every
+// page records what its visitors view, click and run into, for the owner's
+// dashboard on Superforge Infra, from an effect, so only ever in the
+// browser, and asks first, in the banner (frontend/visitors/).
 function Root() {
     const { queryClient } = Route.useRouteContext()
+    const router = useRouter()
+    useEffect(() => startVisitors(router), [router])
     return (
         <QueryClientProvider client={queryClient}>
             <Outlet />
+            <ConsentBanner />
         </QueryClientProvider>
     )
 }

@@ -225,3 +225,88 @@ test("an Infra that doesn't answer, or answers without JSON, is unavailable", as
         expect.objectContaining({ status: 502 })
     )
 })
+
+test("events go with the key, each one's time as ISO 8601, and answer how many were kept", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const { infra, received } = fakeInfra({ status: 200, body: { kept: 2 } })
+    const sent = await infra.sendEvents([
+        { name: "signed-up", user: "user_42" },
+        {
+            name: "paid",
+            at: new Date("2026-11-17T09:30:00.000Z"),
+            user: "user_42",
+            properties: { plan: "monthly" }
+        }
+    ])
+    expect(sent).toEqual({ ok: true, data: { kept: 2 } })
+    expect(received).toEqual([
+        {
+            path: "/v1/events",
+            key: `Bearer ${KEY}`,
+            body: {
+                events: [
+                    { name: "signed-up", user: "user_42" },
+                    {
+                        name: "paid",
+                        at: "2026-11-17T09:30:00.000Z",
+                        user: "user_42",
+                        properties: { plan: "monthly" }
+                    }
+                ]
+            }
+        }
+    ])
+})
+
+test("events Infra refuses say why, and are logged as the app's mistake", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+    const cases = [
+        {
+            answer: {
+                status: 400,
+                body: { error: "invalid", fields: ["events.0.name"] }
+            },
+            refused: { reason: "invalid", fields: ["events.0.name"] }
+        },
+        {
+            answer: {
+                status: 413,
+                body: { error: "too-large", limit: 65536 }
+            },
+            refused: { reason: "too-large", limit: 65536 }
+        }
+    ]
+    for (const { answer, refused } of cases) {
+        const { infra } = fakeInfra(answer)
+        expect(await infra.sendEvents([{ name: "signed-up" }])).toEqual({
+            ok: false,
+            error: refused
+        })
+    }
+    expect(logged).toHaveBeenCalledWith(
+        "Infra refused the app's events",
+        expect.objectContaining({ status: 400 })
+    )
+})
+
+test("events to an Infra that refuses the key, or doesn't answer, are unavailable", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const { infra } = fakeInfra({ status: 401, body: { error: "revoked-key" } })
+    expect(await infra.sendEvents([{ name: "signed-up" }])).toEqual({
+        ok: false,
+        error: { reason: "unavailable" }
+    })
+    const down = infraClient({
+        key: KEY,
+        url: ADDRESS,
+        send: async () => {
+            throw new TypeError("fetch failed")
+        }
+    })
+    expect(await down.sendEvents([{ name: "signed-up" }])).toEqual({
+        ok: false,
+        error: { reason: "unavailable" }
+    })
+})

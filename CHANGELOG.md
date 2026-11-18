@@ -57,6 +57,76 @@ something already there works, which its notes flag.
   How to tell a copy already has it: its `.github/workflows/ci.yml` has a
   `release-tag` job.
 
+Visitors, on Superforge Infra: what visitors view, click and run into on
+the site's pages, and what only the server knows, kept by Infra as events,
+which superforge.studio's dashboard sums up in its Infra tab and Claude
+reads in full through the Superforge MCP. A visitor is asked first, unless
+the owner chooses otherwise.
+
+- **The pages' events**, machinery: `source/frontend/visitors/`, a script
+  of the app's own, started by the root route from an effect, so never in
+  the prerender (`routes/__root.tsx`'s `startVisitors`). It records
+  `view` on each page the router resolves (with the referring site and
+  the campaign on the first), `leave` (how far down, how long visible),
+  `click` on links, buttons and anything with `data-track`, and `error`,
+  ten a page; it never keeps a query string, a fragment, a field's value
+  or an email address. It sends with `fetch`, as plain text, every five
+  seconds and with `keepalive` as the page hides, to
+  `/v1/projects/<project_id>/events`, the `project_id` the Superforge
+  MCP's `create_project` writes into `.superforge/superforge.json`;
+  without one it does nothing. A dev server sends nothing and logs each
+  batch with `console.debug`. No file or address holds a word ad
+  blockers' lists match. `track()` sends the app's own events and
+  `identify()` puts the signed-in person's user ID on them; the dashboard
+  (`routes/dashboard/route.tsx`) and signing in and out
+  (`queries/auth.ts`) call it. The dashboard is `data-private`, so its
+  clicks send no text. Its README has the rest.
+- **Consent**, machinery with the owner's setting: `CONSENT` in
+  `source/frontend/visitors/consent.ts`. `"ask"`, as it ships: until a
+  visitor accepts, and after they decline, nothing is kept on their
+  device, and only `view`, `leave` and `error` go, with no IDs. Once
+  they accept, a lasting visitor ID, a visit's ID (a new one after 30
+  idle minutes) and what couldn't be sent yet are kept in localStorage,
+  and their clicks and the app's events go too. `"assume"`: no banner,
+  remembered from the first visit.
+- **The consent banner**, a starting point:
+  `source/frontend/components/site/consent-banner.tsx`, drawn by the root
+  route on every page, the dashboard's too, only in a browser and only
+  while it asks. A copy may restyle it and reword it in its own voice.
+- **Server events**, machinery: `sendEvents` on `Infra`
+  (`backend/infra/index.ts`), `POST /v1/events` with the key
+  (`client.ts`), checked as Infra checks it and kept by no one in the
+  stand-in (`stand-in.ts`, which answers `{ kept: 0 }`, as a test key
+  does), with the event's shape in `backend/infra/events.ts` and the
+  answers in `answers.ts`. It never throws, and a failure is logged.
+  An event's field rules, which the pages share, are in
+  `source/utilities/schemas/events.ts`. `INFRA_URL`, Infra's address,
+  moves from `backend/infra/client.ts` to `source/utilities/infra.ts`,
+  since the pages send there too.
+- **The sample event**, a starting point: `signed-up`, with the new user's
+  ID, which `backend/auth/routes.ts` sends without waiting on it when a
+  sign-in makes someone new (`tellInfraOfSignUp`), so a slow or failing
+  Infra never holds signing in up.
+- **Docs**: `source/frontend/visitors/README.md`,
+  `source/backend/infra/README.md` ("Events"), `START-HERE.md` (step 1's
+  question 13, and step 3 sets `CONSENT`), `CLAUDE.md` and `README.md`.
+
+Flags:
+
+- **Owner**: whether to keep the banner: keep `"ask"` if any customers
+  are in the EU or the UK, or if they aren't sure (`START-HERE.md`'s
+  question 13). The events are kept only once the copy has a
+  `project_id` in `.superforge/superforge.json` and its domains are
+  listed on the dashboard's Infra tab.
+- **A change in how something works**: every object that is an `Infra`,
+  like a test's fake of it, needs a `sendEvents`, as
+  `backend/auth/tests/routes.test.ts`'s do; and code that imported
+  `INFRA_URL` from `backend/infra/client.ts` imports it from
+  `@/utilities/infra`.
+
+How to tell a copy already has it: `source/frontend/visitors/consent.ts`
+exists, and `Infra` in `source/backend/infra/index.ts` has `sendEvents`.
+
 ## 0.3.0 (2026-11-16)
 
 The dashboard, behind sign-in. Everyone who signs in has a role: the

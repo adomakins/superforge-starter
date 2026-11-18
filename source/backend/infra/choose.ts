@@ -2,7 +2,8 @@ import { existsSync, readFileSync, statSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { parseEnv } from "node:util"
 import { z } from "zod"
-import { INFRA_URL, infraClient } from "./client"
+import { INFRA_URL } from "@/utilities/infra"
+import { infraClient } from "./client"
 import type { Infra, InfraUnavailable } from "./index"
 import { standInInfra, type WaitingSignIn } from "./stand-in"
 
@@ -197,6 +198,9 @@ function unavailableInfra(): Infra {
             return unavailable
         },
         async verifySignIn() {
+            return unavailable
+        },
+        async sendEvents() {
             return unavailable
         }
     }

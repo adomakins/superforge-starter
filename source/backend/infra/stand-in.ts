@@ -1,5 +1,6 @@
 import { randomToken } from "@/backend/auth/tokens"
 import { MINUTE } from "@/utilities/primitives/durations"
+import { EVENTS_BODY_LIMIT, eventsBody, server_events } from "./events"
 import type { Infra } from "./index"
 
 // How Infra treats a code: it works for 15 minutes and five tries, and a
@@ -21,7 +22,8 @@ export type WaitingSignIn = {
  * with no key and no network. Starting a sign-in sends nothing and answers
  * the code and the link, and verifying checks them as Infra does: each
  * works once, for 15 minutes, and a code for five tries. No limits apply,
- * as none do to a test key. The tests always use it, so they never reach
+ * as none do to a test key. Events are checked as Infra checks them, and
+ * none is kept. The tests always use it, so they never reach
  * Infra, and so does a dev server with no test key (choose.ts). A build
  * never does: anyone could sign in as anyone, since the page shows the
  * code.
@@ -95,6 +97,26 @@ export function standInInfra(
                 }
             } else {
                 return { ok: false, error: { reason: "no-code" } }
+            }
+        },
+
+        async sendEvents(events) {
+            const body = JSON.stringify(eventsBody(events))
+            if (new TextEncoder().encode(body).byteLength > EVENTS_BODY_LIMIT) {
+                return {
+                    ok: false,
+                    error: { reason: "too-large", limit: EVENTS_BODY_LIMIT }
+                }
+            }
+            const checked = server_events.safeParse(events)
+            if (checked.success) {
+                return { ok: true, data: { kept: 0 } }
+            } else {
+                // The fields that failed, as Infra names them
+                const fields = checked.error.issues.map((issue) =>
+                    ["events", ...issue.path].join(".")
+                )
+                return { ok: false, error: { reason: "invalid", fields } }
             }
         }
     }

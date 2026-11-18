@@ -42,6 +42,16 @@ Ask for each of these. The answers go into PRODUCT.md and DESIGN.md (step
 12. **Its own people's email addresses**, starting with the owner's: they
     see the whole dashboard (the people who can sign in, and the work
     running in the background) from the first time they sign in.
+13. **Whether visitors are asked before the site remembers them.** Once
+    the app is on Superforge Infra, its pages count what visitors view and
+    click, for the owner's dashboard. By default a small banner asks each
+    visitor first, and until they accept, the site keeps nothing on their
+    device and only counts them anonymously. Say plainly: keep the banner
+    if any of the business's customers are in the EU or the UK, or if the
+    owner isn't sure. Without it, the site remembers each browser from the
+    first visit. This is how the site behaves, not legal advice: an owner
+    who needs to know what the law asks of them should ask someone
+    qualified to say.
 
 ## 2. Make it look like the business
 
@@ -110,6 +120,13 @@ Then say who signs in, from step 1's answers, in `ACCESS` in
   those two, like technicians and customers, add the roles to `ROLES` in
   `source/utilities/schemas/users.ts` (`workbench/writing-code.md`,
   "Roles and who can sign in").
+
+Then say whether visitors are asked first, from step 1's answer, in
+`CONSENT` in `source/frontend/visitors/consent.ts`: `"ask"`, as it ships,
+keeps the banner, and `"assume"` takes it away and remembers each browser
+from the first visit. When unsure, keep `"ask"`. The banner
+(`source/frontend/components/site/consent-banner.tsx`) shows only once the
+app has an Infra project; put its words in the business's voice too.
 
 ## 4. Write PRODUCT.md and DESIGN.md
 

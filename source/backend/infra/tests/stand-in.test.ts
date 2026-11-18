@@ -118,3 +118,39 @@ test("the code and the link stop after 15 minutes", async () => {
         error: { reason: "no-link" }
     })
 })
+
+test("events are checked as Infra checks them, and none is kept", async () => {
+    const infra = standInInfra()
+    expect(
+        await infra.sendEvents([
+            { name: "signed-up", user: "user_42" },
+            { name: "paid", at: new Date(), properties: { plan: "monthly" } }
+        ])
+    ).toEqual({ ok: true, data: { kept: 0 } })
+    expect(
+        await infra.sendEvents([
+            { name: "signed-up" },
+            { name: "Signed Up", user: "ada@example.com" }
+        ])
+    ).toEqual({
+        ok: false,
+        error: { reason: "invalid", fields: ["events.1.name", "events.1.user"] }
+    })
+    expect(await infra.sendEvents([])).toEqual({
+        ok: false,
+        error: { reason: "invalid", fields: ["events"] }
+    })
+})
+
+test("a call's events over 64 KB are too large", async () => {
+    const infra = standInInfra()
+    const big = { note: "x".repeat(1000) }
+    const events = Array.from({ length: 80 }, () => ({
+        name: "noted",
+        properties: big
+    }))
+    expect(await infra.sendEvents(events)).toEqual({
+        ok: false,
+        error: { reason: "too-large", limit: 65536 }
+    })
+})
