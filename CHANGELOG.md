@@ -46,6 +46,17 @@ A patch release (`0.1.1`) fixes something; a minor release (`0.2.0`) adds
 or changes something. Until `1.0.0`, a minor release may also change how
 something already there works, which its notes flag.
 
+## Unreleased
+
+- **CI tags the template's releases**, machinery: a `release-tag` job in
+  `.github/workflows/ci.yml`, after `check` on a push to `main`. In the
+  template, it tags a version in `.superforge/superforge.json` that has no
+  tag yet, on the commit that set it, and fails on a version with no
+  heading here. A copy isn't a GitHub template repository, so the job
+  skips there (`github.event.repository.is_template`) and changes nothing.
+  How to tell a copy already has it: its `.github/workflows/ci.yml` has a
+  `release-tag` job.
+
 ## 0.3.0 (2026-11-16)
 
 The dashboard, behind sign-in. Everyone who signs in has a role: the
