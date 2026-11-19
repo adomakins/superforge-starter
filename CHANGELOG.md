@@ -56,6 +56,12 @@ something already there works, which its notes flag.
   skips there (`github.event.repository.is_template`) and changes nothing.
   How to tell a copy already has it: its `.github/workflows/ci.yml` has a
   `release-tag` job.
+- **The upgrade test fills `inet` columns**, machinery: `fill()`
+  (`source/database/tests/support/fill.ts`) gives one an address set aside
+  for documentation, `203.0.113.x`. Without it, a table with an `inet`
+  column, like an IP address, passes its own PR and then fails `check` on
+  every PR after it merges, once the upgrade test's base has it. How to
+  tell a copy already has it: `fill.ts` has a `case "inet"`.
 
 Visitors, on Superforge Infra: what visitors view, click and run into on
 the site's pages, and what only the server knows, kept by Infra as events,
