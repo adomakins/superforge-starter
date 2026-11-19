@@ -46,7 +46,13 @@ A patch release (`0.1.1`) fixes something; a minor release (`0.2.0`) adds
 or changes something. Until `1.0.0`, a minor release may also change how
 something already there works, which its notes flag.
 
-## Unreleased
+## 0.4.0 (2026-11-18)
+
+What visitors do on the site, kept by Superforge Infra as events for the
+owner's dashboard, all of it through the app's own server. Whom the site
+remembers, by a first-party cookie, is the owner's choice. And two pieces
+of machinery: CI tags each release, and the upgrade test fills `inet`
+columns.
 
 - **CI tags the template's releases**, machinery: a `release-tag` job in
   `.github/workflows/ci.yml`, after `check` on a push to `main`. In the
@@ -56,6 +62,12 @@ something already there works, which its notes flag.
   skips there (`github.event.repository.is_template`) and changes nothing.
   How to tell a copy already has it: its `.github/workflows/ci.yml` has a
   `release-tag` job.
+- **The upgrade test fills `inet` columns**, machinery: `fill()`
+  (`source/database/tests/support/fill.ts`) gives one an address set aside
+  for documentation, `203.0.113.x`. Without it, a table with an `inet`
+  column, like an IP address, passes its own PR and then fails `check` on
+  every PR after it merges, once the upgrade test's base has it. How to
+  tell a copy already has it: `fill.ts` has a `case "inet"`.
 
 Visitors, on Superforge Infra: what visitors view, click and run into on
 the site's pages, and what only the server knows, kept by Infra as events,

@@ -151,6 +151,9 @@ function sample(table: string, column: Column, variant: number) {
         case "jsonb":
         case "json":
             return JSON.stringify({ sample: variant })
+        case "inet":
+            // An address set aside for documentation (RFC 5737)
+            return `203.0.113.${(variant % 254) + 1}`
         default:
             throw new Error(
                 `fill() has no sample for ${table}.${column.name}, of type ${column.type}`
