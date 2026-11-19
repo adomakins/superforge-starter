@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { expect, test, vi } from "vitest"
 import { infraClient } from "../client"
-import type { Visit } from "../index"
+import type { FiledComment, Visit } from "../index"
 
 // The client against a fake of Infra's API, answering what Infra's README
 // says each call answers, so no test reaches the real one
@@ -391,4 +391,71 @@ test("a page's events to an Infra that's down, or answers what the app doesn't e
         ok: false,
         error: { reason: "unavailable" }
     })
+})
+
+// A comment as the app's server sends it, with who filed it
+const COMMENT: FiledComment = {
+    body: "This button sits too close to the edge on a phone",
+    path: "/pricing",
+    title: "Pricing",
+    element: {
+        selector: "body > div > main > a",
+        tag: "a",
+        text: "Book a call",
+        classes: "inline-flex",
+        box: { x: 120, y: 1640, width: 180, height: 44 }
+    },
+    viewport: { width: 1440, height: 900 },
+    user: "5f0c1a2b-3d4e-4f60-8a9b-0c1d2e3f4a5b",
+    user_agent: "Mozilla/5.0"
+}
+
+test("a comment goes to /v1/comments with the key, and answers its ID", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const { infra, received } = fakeInfra({
+        status: 201,
+        body: {
+            comment: { id: "c-1", created_at: "2026-11-18T18:15:00.000Z" }
+        }
+    })
+    expect(await infra.fileComment(COMMENT)).toEqual({
+        ok: true,
+        data: { id: "c-1", created_at: new Date("2026-11-18T18:15:00.000Z") }
+    })
+    expect(received).toEqual([
+        { path: "/v1/comments", key: `Bearer ${KEY}`, body: COMMENT }
+    ])
+})
+
+test("a comment Infra refuses says why, and is logged as the app's mistake", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+    const { infra } = fakeInfra({
+        status: 400,
+        body: { error: "invalid", fields: ["element.tag"] }
+    })
+    expect(await infra.fileComment(COMMENT)).toEqual({
+        ok: false,
+        error: { reason: "invalid", fields: ["element.tag"] }
+    })
+    expect(logged).toHaveBeenCalledWith(
+        "Infra refused a comment",
+        expect.objectContaining({ status: 400 })
+    )
+})
+
+test("a comment to an Infra that's down, or answers 200, is unavailable", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    for (const answer of [
+        { status: 503, body: { error: "unavailable" } },
+        { status: 200, body: { kept: 1 } },
+        { status: 401, body: { error: "revoked-key" } }
+    ]) {
+        const { infra } = fakeInfra(answer)
+        expect(await infra.fileComment(COMMENT)).toEqual({
+            ok: false,
+            error: { reason: "unavailable" }
+        })
+    }
 })

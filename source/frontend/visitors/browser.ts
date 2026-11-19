@@ -19,8 +19,8 @@ export type VisitorsRouter = {
 // What a click is counted on: the closest of these to what was clicked
 const CLICKABLE = "a, button, [role=button], [data-track]"
 
-// A form's fields, whose text is never kept
-const FIELDS = "input, textarea, select, [contenteditable]"
+/** A form's fields, whose text is never kept, here or in a comment's. */
+export const FIELDS = "input, textarea, select, [contenteditable]"
 
 /**
  * Sends a batch to the app's own /api/visits, as JSON, with the site's
@@ -203,6 +203,10 @@ function scrollDepth() {
 // it is, never what's typed in a field
 function clicked(visitors: Recorder, event: Event) {
     if (!(event.target instanceof Element)) {
+        return
+    }
+    // Not the visitor's, like the toolbar the signed-in see
+    if (event.target.closest("[data-untracked]") !== null) {
         return
     }
     const element = event.target.closest(CLICKABLE)

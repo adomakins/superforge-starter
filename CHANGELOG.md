@@ -46,6 +46,46 @@ A patch release (`0.1.1`) fixes something; a minor release (`0.2.0`) adds
 or changes something. Until `1.0.0`, a minor release may also change how
 something already there works, which its notes flag.
 
+## Unreleased
+
+The toolbar: whoever's signed in spots something that should change,
+clicks it and says what, and the comment goes to Superforge Infra, for
+the AI that builds the app to work through later.
+
+- **The toolbar**, machinery: `source/frontend/components/toolbar/`,
+  which the root route draws on every page (`routes/__root.tsx`) for
+  whoever's signed in, on a computer with a mouse: never for a visitor,
+  on a phone or a tablet, or in the prerender. Every signed-in person
+  sees it, the business's customers among them where `ACCESS.sign_in` is
+  `anyone`. Comment picks an element as a browser's inspector does,
+  outlined in a new theme token, `--highlight` (`styles.css`), which a
+  copy whose theme START-HERE.md set adds as it is; a click on the page
+  picks rather than does what it would, and Escape steps back. The
+  comment box beside the element posts to the app's own `/api/comments`.
+  The toolbar drags to the middle of the bottom or a corner, which each
+  browser keeps in localStorage, and its ⓘ says what it's for. A comment
+  carries the page's path and title, the window's size, and the element:
+  a CSS selector that finds it again, its tag, its text (none from a field
+  or inside `data-private`, and no email address), its `class` and its
+  box. The folder's README has the rest. How to tell a copy already has
+  it: `source/frontend/components/toolbar/` exists.
+- **Comments, through the app's server**, machinery: `POST /api/comments`
+  (`source/backend/comments/routes.ts`), behind `signedIn`, adds the
+  user's ID and their `User-Agent` and calls `fileComment`, new on the
+  Infra wrapper (`source/backend/infra/`: `comments.ts`, `answers.ts`,
+  `client.ts`, `stand-in.ts`, `choose.ts`), which sends Infra's
+  `POST /v1/comments` with the key. Infra keeps a test key's comments
+  too, marked as a test's; the stand-in checks one and keeps none. The
+  tests' own Infras (`auth/tests/`, `visits/tests/`) gain `fileComment`,
+  which a copy's own test Infras need too. Until Infra answers
+  `/v1/comments`, a comment answers 503 and the box says it couldn't be
+  saved. How to tell a copy already has it:
+  `source/backend/comments/routes.ts` exists.
+- **`data-untracked`**, machinery: the visitors' script
+  (`frontend/visitors/browser.ts`) doesn't count a click inside it, as it
+  doesn't the toolbar's. How to tell a copy already has it: `browser.ts`
+  checks `data-untracked`.
+
 ## 0.4.0 (2026-11-18)
 
 What visitors do on the site, kept by Superforge Infra as events for the

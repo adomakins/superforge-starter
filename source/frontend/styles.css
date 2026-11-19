@@ -34,6 +34,8 @@
     --color-border: var(--border);
     --color-destructive: var(--destructive);
     --color-success: var(--success);
+    --color-highlight: var(--highlight);
+    --color-highlight-foreground: var(--highlight-foreground);
     --color-accent-foreground: var(--accent-foreground);
     --color-accent: var(--accent);
     --color-muted-foreground: var(--muted-foreground);
@@ -75,6 +77,11 @@
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
     --success: oklch(0.627 0.194 149.214);
+    /* The toolbar's outline round the element a comment is on, as a
+       browser's inspector draws it: apart from the business's colors, so
+       it shows on any of them */
+    --highlight: oklch(0.6 0.19 256);
+    --highlight-foreground: oklch(0.985 0 0);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
     --ring: oklch(0.708 0 0);
@@ -113,6 +120,8 @@
         --accent-foreground: oklch(0.985 0 0);
         --destructive: oklch(0.704 0.191 22.216);
         --success: oklch(0.723 0.219 149.579);
+        --highlight: oklch(0.68 0.16 252);
+        --highlight-foreground: oklch(0.145 0 0);
         --border: oklch(1 0 0 / 10%);
         --input: oklch(1 0 0 / 15%);
         --ring: oklch(0.556 0 0);
@@ -150,4 +159,11 @@
     select:not(:disabled) {
         cursor: pointer;
     }
+}
+
+/* The toolbar's comment mode: a crosshair over the page while someone
+   picks the element a comment is on, and the toolbar's own pointer over
+   the toolbar (components/toolbar/) */
+html[data-picking] body *:not([data-toolbar], [data-toolbar] *) {
+    cursor: crosshair !important;
 }

@@ -6,6 +6,7 @@ import { VISITOR_MODE } from "@/utilities/visitors"
 import { accountRoutes } from "./account/routes"
 import { ACCESS } from "./auth/access"
 import { authRoutes } from "./auth/routes"
+import { commentRoutes } from "./comments/routes"
 import type { ApiEnvironment } from "./context"
 import { answerNotFound, answerUnexpected } from "./failures"
 import { healthRoutes } from "./health/routes"
@@ -82,6 +83,10 @@ export function apiWith(variables: () => ApiEnvironment["Variables"]) {
             // What visitors do on the pages, which the pages' script posts
             // under /visits, sent on to Infra
             .route("/", visitRoutes)
+
+            // What the signed-in say about the app, from the toolbar on
+            // every page, under /comments, sent on to Infra
+            .route("/", commentRoutes)
 
             // The business's side of the dashboard, for its own people:
             // everyone who can sign in, under /users, and the workflows'

@@ -1,7 +1,9 @@
 import { randomToken } from "@/backend/auth/tokens"
 import { MINUTE } from "@/utilities/primitives/durations"
+import { COMMENT_BODY_LIMIT } from "@/utilities/schemas/comments"
 import { EVENTS_BODY_LIMIT } from "@/utilities/schemas/events"
 import type { VisitorMode } from "@/utilities/visitors"
+import { filed_comment } from "./comments"
 import { eventsBody, server_events } from "./events"
 import type { Infra } from "./index"
 import { type VisitConsent, visit } from "./visits"
@@ -27,14 +29,16 @@ export type WaitingSignIn = {
  * works once, for 15 minutes, and a code for five tries. No limits apply,
  * as none do to a test key. Events are checked as Infra checks them, and
  * none is kept; a page's are answered by the app's mode as Infra answers
- * them for a visitor it can't place (`treatment`). The tests always use
- * it, so they never reach Infra, and so does a dev server with no test key
- * (choose.ts). A build never does: anyone could sign in as anyone, since
- * the page shows the code.
+ * them for a visitor it can't place (`treatment`). A comment is checked
+ * too, and answered an ID, though nothing keeps it, where Infra keeps a
+ * test key's. The tests always use it, so they never reach Infra, and so
+ * does a dev server with no test key (choose.ts). A build never does:
+ * anyone could sign in as anyone, since the page shows the code.
  *
  * `waiting` is where it keeps what it sent, by address: its own, or one
  * that outlives a dev server's reloads. With `logs`, as a dev server has
- * it, each batch of a page's events is logged, since nothing keeps them.
+ * it, each batch of a page's events is logged, and each comment, since
+ * nothing keeps them.
  */
 export function standInInfra({
     waiting = new Map(),
@@ -163,6 +167,36 @@ export function standInInfra({
                 )
             }
             return { ok: true, data: { kept: 0, remembered, ask } }
+        },
+
+        async fileComment(comment) {
+            const body = JSON.stringify(comment)
+            if (
+                new TextEncoder().encode(body).byteLength > COMMENT_BODY_LIMIT
+            ) {
+                return {
+                    ok: false,
+                    error: { reason: "too-large", limit: COMMENT_BODY_LIMIT }
+                }
+            }
+            const checked = filed_comment.safeParse(comment)
+            if (!checked.success) {
+                // The fields that failed, as Infra names them
+                const fields = checked.error.issues.map((issue) =>
+                    issue.path.join(".")
+                )
+                return { ok: false, error: { reason: "invalid", fields } }
+            }
+            if (logs) {
+                console.info(
+                    "Infra's stand-in: a comment, which Infra would keep, and which nothing keeps here",
+                    checked.data
+                )
+            }
+            return {
+                ok: true,
+                data: { id: crypto.randomUUID(), created_at: new Date() }
+            }
         }
     }
 }

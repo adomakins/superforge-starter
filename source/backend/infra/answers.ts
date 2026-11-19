@@ -99,3 +99,19 @@ export const events_refused = z.union([
         .object({ error: z.literal("too-large"), limit: z.number() })
         .transform(({ limit }) => ({ reason: "too-large" as const, limit }))
 ])
+
+/** A comment Infra kept: its ID, and when. */
+export const kept_comment = z
+    .object({
+        comment: z.object({
+            id: z.string(),
+            created_at: z.iso.datetime().transform((value) => new Date(value))
+        })
+    })
+    .transform(({ comment }) => comment)
+
+/**
+ * Why Infra didn't keep a comment: the same two refusals as events', each
+ * a bug in what the app sent.
+ */
+export const comment_refused = events_refused

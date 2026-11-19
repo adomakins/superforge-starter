@@ -1,7 +1,9 @@
 import type { z } from "zod"
 import type { SignInProof } from "@/utilities/schemas/auth"
 import type {
+    comment_refused,
     events_refused,
+    kept_comment,
     sent_events,
     sent_visit,
     start_refused,
@@ -10,6 +12,7 @@ import type {
     verify_refused
 } from "./answers"
 import { chooseInfra } from "./choose"
+import type { FiledComment } from "./comments"
 import type { ServerEvent } from "./events"
 import type { Visit } from "./visits"
 
@@ -17,8 +20,9 @@ import type { Visit } from "./visits"
 // wrapper every route and step calls: never a bare `fetch` to it anywhere
 // else (workbench/writing-code.md, "A call to an outside service"). For now
 // it's sign-in, where Infra emails a visitor a code and a link, and says
-// whether what they brought back is right, and events, what happened in
-// the app, for the owner's dashboard: the pages' and the server's. The app
+// whether what they brought back is right; events, what happened in the
+// app, for the owner's dashboard: the pages' and the server's; and
+// comments, what the app's people said about it from the toolbar. The app
 // keeps its own users and sessions (backend/auth/). README.md here has the
 // calls.
 
@@ -65,6 +69,16 @@ export type Infra = {
     sendVisit(
         visit: Visit
     ): AsyncOperation<SentVisit, EventsRefused | InfraUnavailable>
+    /**
+     * Sends Infra a comment someone signed in wrote about an element of a
+     * page, which the toolbar posted to the app's own /api/comments, with
+     * who they are (comments.ts). Infra keeps it, a test key's too, and
+     * answers its ID. It's never retried: a comment sent twice is kept
+     * twice.
+     */
+    fileComment(
+        comment: FiledComment
+    ): AsyncOperation<KeptComment, CommentRefused | InfraUnavailable>
 }
 
 // What Infra answers, as the app sees it (answers.ts has each field)
@@ -74,7 +88,9 @@ export type VerifyRefused = z.output<typeof verify_refused>
 export type SentEvents = z.output<typeof sent_events>
 export type SentVisit = z.output<typeof sent_visit>
 export type EventsRefused = z.output<typeof events_refused>
-export type { ServerEvent, Visit }
+export type KeptComment = z.output<typeof kept_comment>
+export type CommentRefused = z.output<typeof comment_refused>
+export type { FiledComment, ServerEvent, Visit }
 
 /**
  * Infra couldn't be asked: no key in a build, a key it refused, or an
