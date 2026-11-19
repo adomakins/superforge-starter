@@ -39,7 +39,8 @@ export type WorkflowsProcess = {
     // Until DBOS has launched, and after
     starting: Promise<void> | null
     gate: pg.Client | null
-    // Finished runs pruned about once an hour (engine.ts)
+    // Pruning finished runs about once an hour, when a copy keeps them for
+    // a while rather than for good (engine.ts)
     pruning: ReturnType<typeof setInterval> | null
     // For starting a workflow before DBOS has launched here
     client: Promise<DBOSClient> | null

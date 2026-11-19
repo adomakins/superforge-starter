@@ -26,7 +26,7 @@ import {
     stopWorkflows,
     takeGate
 } from "../engine"
-import type { WorkflowDependencies } from "../process"
+import { type WorkflowDependencies, workflowsProcess } from "../process"
 
 // The workflows on DBOS itself, in real time, on a database of their own:
 // the gate, a run started before DBOS has launched, a run that carries on
@@ -151,6 +151,8 @@ describe("the workflows on DBOS", { timeout: 60_000 }, () => {
         await before?.end()
         await starting
         expect(DBOS.isInitialized()).toBe(true)
+        // Finished runs are kept for good, so nothing prunes them
+        expect(workflowsProcess().pruning).toBeNull()
 
         expect(await DBOS.retrieveWorkflow(id).getResult()).toEqual([
             "first of queued",

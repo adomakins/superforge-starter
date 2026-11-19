@@ -3,7 +3,7 @@ import pg from "pg"
 import { z } from "zod"
 import { appDatabase, appDatabaseUrl } from "@/database"
 import { appStorage } from "@/database/storage"
-import { HOUR, MINUTE, WEEK } from "@/utilities/primitives/durations"
+import { HOUR, MINUTE } from "@/utilities/primitives/durations"
 import { register, type Workflow, type Workflows } from "./define"
 import { WORKFLOWS } from "./index"
 import { type WorkflowDependencies, workflowsProcess } from "./process"
@@ -30,9 +30,12 @@ const CLIENT_POOL_SIZE = 2
 // its own on `postgres`, database/local/idle.ts)
 const GATE: [number, number] = [1689, 0]
 
-// Finished runs are kept this long, for reading back what one did, then
-// pruned about once an hour
-const KEEP_FINISHED_FOR = WEEK
+// How long finished runs are kept, for reading back what one did: for
+// good, as the template ships, since a run and its steps are the record of
+// what the business's background work did. A copy whose runs grow too many
+// for its database sets a duration instead (`90 * DAY`), and the runs that
+// finished longer ago than that are then pruned about once an hour
+const KEEP_FINISHED_FOR: number | "forever" = "forever"
 const PRUNE_EVERY = HOUR
 const PRUNE_PAGE = 1000
 
@@ -139,11 +142,7 @@ async function launch(dependencies: WorkflowDependencies, session: number) {
     }
     going()
 
-    held.pruning = setInterval(() => {
-        pruneFinishedRuns(Date.now() - KEEP_FINISHED_FOR).catch((error) => {
-            console.error("Pruning finished runs failed", { error })
-        })
-    }, PRUNE_EVERY)
+    held.pruning = pruneOnSchedule(KEEP_FINISHED_FOR)
     console.info("The workflows are running", {
         application_version: DBOS.applicationVersion
     })
@@ -330,6 +329,23 @@ function dbosClient() {
         applicationName: APPLICATION
     })
     return held.client
+}
+
+/**
+ * Prunes the runs that finished longer ago than `keep`, about once an
+ * hour, or none ever, when they're kept for good. Answers the interval,
+ * for a stop to clear.
+ */
+function pruneOnSchedule(keep: number | "forever") {
+    if (keep === "forever") {
+        return null
+    } else {
+        return setInterval(() => {
+            pruneFinishedRuns(Date.now() - keep).catch((error) => {
+                console.error("Pruning finished runs failed", { error })
+            })
+        }, PRUNE_EVERY)
+    }
 }
 
 /**
