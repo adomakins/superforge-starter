@@ -112,7 +112,10 @@ export function chooseInfra({
                 "Infra: no test key, so sign-in uses the stand-in, which emails nothing"
             )
         }
-        return { infra: standInInfra(devServerSignIns()), using: "stand-in" }
+        return {
+            infra: standInInfra({ waiting: devServerSignIns(), logs: true }),
+            using: "stand-in"
+        }
     }
 }
 
@@ -197,6 +200,12 @@ function unavailableInfra(): Infra {
             return unavailable
         },
         async verifySignIn() {
+            return unavailable
+        },
+        async sendEvents() {
+            return unavailable
+        },
+        async sendVisit() {
             return unavailable
         }
     }

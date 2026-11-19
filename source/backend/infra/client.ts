@@ -1,13 +1,20 @@
 import { SECOND } from "@/utilities/primitives/durations"
 import {
+    events_refused,
+    sent_events,
+    sent_visit,
     start_refused,
     started_sign_in,
     verified_sign_in,
     verify_refused
 } from "./answers"
+import { eventsBody } from "./events"
 import type { Infra, InfraUnavailable } from "./index"
 
-/** Infra's API, which a project's keys call. */
+/**
+ * Infra's API, which a project's keys call. A server can be pointed at
+ * another Infra with `INFRA_URL` (choose.ts).
+ */
 export const INFRA_URL = "https://infra.superforge.studio/v1"
 
 // How long a call waits for Infra's answer. Starting a sign-in waits on
@@ -18,9 +25,10 @@ const UNAVAILABLE: InfraUnavailable = { reason: "unavailable" }
 
 /**
  * Infra, called over HTTP with a project's key: a secret key in a build, a
- * test key in a dev server. No call is retried, since neither is safe to
- * send twice (a second start sends a second email, and a second verify
- * finds the code spent); the visitor asks again instead. `send` is `fetch`,
+ * test key in a dev server. No call is retried, since none is safe to send
+ * twice (a second start sends a second email, a second verify finds the
+ * code spent, and events sent again are kept twice); the visitor asks
+ * again instead, and an event that didn't go is lost. `send` is `fetch`,
  * or a test's own.
  */
 export function infraClient({
@@ -107,6 +115,64 @@ export function infraClient({
             } else {
                 const parsed = verify_refused.safeParse(answer.json)
                 if (parsed.success) {
+                    return { ok: false, error: parsed.data }
+                } else {
+                    return unexpected(call, answer)
+                }
+            }
+        },
+
+        async sendEvents(events) {
+            const call = "/events"
+            const answer = await post(call, eventsBody(events))
+            if (answer === null) {
+                return { ok: false, error: UNAVAILABLE }
+            } else if (answer.status === 200) {
+                const parsed = sent_events.safeParse(answer.json)
+                if (parsed.success) {
+                    return { ok: true, data: parsed.data }
+                } else {
+                    return unexpected(call, answer)
+                }
+            } else {
+                const parsed = events_refused.safeParse(answer.json)
+                if (parsed.success) {
+                    // What the app sent is wrong, which only a change here
+                    // fixes
+                    console.error("Infra refused the app's events", {
+                        call,
+                        status: answer.status,
+                        refused: parsed.data
+                    })
+                    return { ok: false, error: parsed.data }
+                } else {
+                    return unexpected(call, answer)
+                }
+            }
+        },
+
+        async sendVisit(visit) {
+            const call = "/visits"
+            const answer = await post(call, visit)
+            if (answer === null) {
+                return { ok: false, error: UNAVAILABLE }
+            } else if (answer.status === 200) {
+                const parsed = sent_visit.safeParse(answer.json)
+                if (parsed.success) {
+                    return { ok: true, data: parsed.data }
+                } else {
+                    return unexpected(call, answer)
+                }
+            } else {
+                const parsed = events_refused.safeParse(answer.json)
+                if (parsed.success) {
+                    // What the app sent is wrong, which only a change here
+                    // fixes
+                    console.error("Infra refused a page's events", {
+                        call,
+                        status: answer.status,
+                        refused: parsed.data
+                    })
                     return { ok: false, error: parsed.data }
                 } else {
                     return unexpected(call, answer)

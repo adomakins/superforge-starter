@@ -1,16 +1,19 @@
 import type { Context } from "hono"
 import { z } from "zod"
 
-// What Infra needs to know about who's signing in, from the request
+// What Infra needs to know about a visitor, from their request: who's
+// signing in (auth/routes.ts), and who sent a page's events
+// (visits/routes.ts)
 
-// An IPv4 or IPv6 address, as Infra takes one
-const ip_address = z.union([z.ipv4(), z.ipv6()])
+/** An IPv4 or IPv6 address, as Infra takes one. */
+export const ip_address = z.union([z.ipv4(), z.ipv6()])
 
 /**
- * The visitor's IP address, which Infra's limits count by: the
- * `X-Real-IP` header Railway's proxy sets, since the connection's own
- * address is the proxy's. A request without it, like one to a dev server
- * or to the build on this computer, counts as this computer's own.
+ * The visitor's IP address, which Infra's sign-in limits count by, and
+ * places a visitor's country by: the `X-Real-IP` header Railway's proxy
+ * sets, since the connection's own address is the proxy's. A request
+ * without it, like one to a dev server or to the build on this computer,
+ * counts as this computer's own.
  */
 export function visitorIp(context: Context) {
     const parsed = ip_address.safeParse(context.req.header("X-Real-IP"))
@@ -19,12 +22,29 @@ export function visitorIp(context: Context) {
     } else {
         if (!import.meta.env.DEV) {
             console.warn(
-                "A sign-in came without Railway's X-Real-IP, so it counts as 127.0.0.1",
-                { header: context.req.header("X-Real-IP") ?? null }
+                "A request came without Railway's X-Real-IP, so it counts as 127.0.0.1",
+                {
+                    path: context.req.path,
+                    header: context.req.header("X-Real-IP") ?? null
+                }
             )
         }
         return "127.0.0.1"
     }
+}
+
+/** The longest `User-Agent` Infra takes. */
+const LONGEST_USER_AGENT = 1024
+
+/**
+ * The browser, as it describes itself (`User-Agent`), for Infra to tell a
+ * bot from a person and a phone from a laptop, which it never keeps: as it
+ * came, shortened to what Infra takes, or empty without one.
+ */
+export function visitorUserAgent(context: Context) {
+    return (context.req.header("User-Agent") ?? "")
+        .trim()
+        .slice(0, LONGEST_USER_AGENT)
 }
 
 // The longest browser description kept with a session: a real one is a few

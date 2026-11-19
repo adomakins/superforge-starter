@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { sign_in_start, sign_in_verify } from "@/utilities/schemas/auth"
 import type { ApiEnvironment } from "../context"
 import { failure, validated } from "../failures"
+import type { Infra } from "../infra"
 import { tellTeamOfSignUp } from "../users/workflows"
 import { endSession } from "./sessions"
 import { maySignIn, signIn } from "./sign-in"
@@ -124,6 +125,7 @@ export const authRoutes = new Hono<ApiEnvironment>()
                 console.info("Signed in", { user_id: user.id, joined })
                 if (joined) {
                     await tellTeam(context.var.workflows, user)
+                    tellInfraOfSignUp(context.var.infra, user.id)
                 }
                 return context.json({ user }, 200)
             }
@@ -187,4 +189,28 @@ async function tellTeam(
             error
         })
     }
+}
+
+// Tells Infra someone new has signed up, as a `signed-up` event with their
+// user's ID, never their email, for the owner's dashboard and Claude
+// (backend/infra/README.md, "Events"). It's sent without waiting on it, so
+// a slow or failing Infra never holds up signing in: a failure is logged,
+// and the event is lost.
+function tellInfraOfSignUp(infra: Infra, user_id: string) {
+    infra
+        .sendEvents([{ name: "signed-up", user: user_id }])
+        .then((sent) => {
+            if (!sent.ok) {
+                console.warn("The sign-up's event didn't reach Infra", {
+                    user_id,
+                    reason: sent.error.reason
+                })
+            }
+        })
+        .catch((error: unknown) => {
+            console.error("Sending the sign-up's event threw", {
+                user_id,
+                error
+            })
+        })
 }

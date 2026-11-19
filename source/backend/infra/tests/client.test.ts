@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { expect, test, vi } from "vitest"
 import { infraClient } from "../client"
+import type { Visit } from "../index"
 
 // The client against a fake of Infra's API, answering what Infra's README
 // says each call answers, so no test reaches the real one
@@ -224,4 +225,170 @@ test("an Infra that doesn't answer, or answers without JSON, is unavailable", as
         "Infra answered without JSON",
         expect.objectContaining({ status: 502 })
     )
+})
+
+test("events go with the key, each one's time as ISO 8601, and answer how many were kept", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const { infra, received } = fakeInfra({ status: 200, body: { kept: 2 } })
+    const sent = await infra.sendEvents([
+        { name: "signed-up", user: "user_42" },
+        {
+            name: "paid",
+            at: new Date("2026-11-17T09:30:00.000Z"),
+            user: "user_42",
+            properties: { plan: "monthly" }
+        }
+    ])
+    expect(sent).toEqual({ ok: true, data: { kept: 2 } })
+    expect(received).toEqual([
+        {
+            path: "/v1/events",
+            key: `Bearer ${KEY}`,
+            body: {
+                events: [
+                    { name: "signed-up", user: "user_42" },
+                    {
+                        name: "paid",
+                        at: "2026-11-17T09:30:00.000Z",
+                        user: "user_42",
+                        properties: { plan: "monthly" }
+                    }
+                ]
+            }
+        }
+    ])
+})
+
+test("events Infra refuses say why, and are logged as the app's mistake", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+    const cases = [
+        {
+            answer: {
+                status: 400,
+                body: { error: "invalid", fields: ["events.0.name"] }
+            },
+            refused: { reason: "invalid", fields: ["events.0.name"] }
+        },
+        {
+            answer: {
+                status: 413,
+                body: { error: "too-large", limit: 65536 }
+            },
+            refused: { reason: "too-large", limit: 65536 }
+        }
+    ]
+    for (const { answer, refused } of cases) {
+        const { infra } = fakeInfra(answer)
+        expect(await infra.sendEvents([{ name: "signed-up" }])).toEqual({
+            ok: false,
+            error: refused
+        })
+    }
+    expect(logged).toHaveBeenCalledWith(
+        "Infra refused the app's events",
+        expect.objectContaining({ status: 400 })
+    )
+})
+
+test("events to an Infra that refuses the key, or doesn't answer, are unavailable", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const { infra } = fakeInfra({ status: 401, body: { error: "revoked-key" } })
+    expect(await infra.sendEvents([{ name: "signed-up" }])).toEqual({
+        ok: false,
+        error: { reason: "unavailable" }
+    })
+    const down = infraClient({
+        key: KEY,
+        url: ADDRESS,
+        send: async () => {
+            throw new TypeError("fetch failed")
+        }
+    })
+    expect(await down.sendEvents([{ name: "signed-up" }])).toEqual({
+        ok: false,
+        error: { reason: "unavailable" }
+    })
+})
+
+// A batch of a page's events, as the app's /api/visits sends it
+const VISIT: Visit = {
+    mode: "ask-in-eu",
+    visitor: {
+        id: "2f1c8e64-7b5a-4f2e-9c3d-8a6b1e0f4d27",
+        consent: "unasked",
+        user: null,
+        ip: "203.0.113.9",
+        user_agent: "Mozilla/5.0"
+    },
+    sent_at: 1_763_445_600_000,
+    events: [
+        {
+            name: "view",
+            at: 1_763_445_598_000,
+            path: "/pricing",
+            properties: { referrer: "google.com", utm_source: "google" }
+        }
+    ]
+}
+
+test("a page's events go to /v1/visits with the key, as the page sent them, and answer what Infra decided", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const { infra, received } = fakeInfra({
+        status: 200,
+        body: { kept: 1, remembered: false, ask: true }
+    })
+    expect(await infra.sendVisit(VISIT)).toEqual({
+        ok: true,
+        data: { kept: 1, remembered: false, ask: true }
+    })
+    expect(received).toEqual([
+        { path: "/v1/visits", key: `Bearer ${KEY}`, body: VISIT }
+    ])
+})
+
+test("a page's events Infra refuses say why, and are logged as the app's mistake", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+    const { infra } = fakeInfra({
+        status: 400,
+        body: { error: "invalid", fields: ["events.0.path"] }
+    })
+    expect(await infra.sendVisit(VISIT)).toEqual({
+        ok: false,
+        error: { reason: "invalid", fields: ["events.0.path"] }
+    })
+    expect(logged).toHaveBeenCalledWith(
+        "Infra refused a page's events",
+        expect.objectContaining({ status: 400 })
+    )
+})
+
+test("a page's events to an Infra that's down, or answers what the app doesn't expect, are unavailable", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const cases = [
+        { status: 503, body: { error: "unavailable" } },
+        { status: 200, body: { kept: 1 } },
+        { status: 401, body: { error: "unknown-key" } }
+    ]
+    for (const answer of cases) {
+        const { infra } = fakeInfra(answer)
+        expect(await infra.sendVisit(VISIT)).toEqual({
+            ok: false,
+            error: { reason: "unavailable" }
+        })
+    }
+    const down = infraClient({
+        key: KEY,
+        url: ADDRESS,
+        send: async () => {
+            throw new TypeError("fetch failed")
+        }
+    })
+    expect(await down.sendVisit(VISIT)).toEqual({
+        ok: false,
+        error: { reason: "unavailable" }
+    })
 })

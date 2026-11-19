@@ -42,8 +42,10 @@ function Dashboard() {
         // Everyone else's dashboard is their account
         return <Navigate to="/dashboard/account" replace />
     }
+    // `data-private`: the dashboard shows people's names and the
+    // business's own data, so a click here never sends the text it showed
     return (
-        <div className="flex h-dvh min-h-[32rem] flex-col">
+        <div data-private className="flex h-dvh min-h-[32rem] flex-col">
             <DashboardBar user={session.user} internal={internal} />
             <Outlet />
         </div>

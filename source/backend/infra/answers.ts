@@ -69,3 +69,33 @@ export const verify_refused = z.union([
         .object({ error: z.literal("no-link") })
         .transform(() => ({ reason: "no-link" as const }))
 ])
+
+/** Events Infra took: how many it kept, none with a test key. */
+export const sent_events = z.object({ kept: z.number() })
+
+/** A page's events Infra took, and what it decided of their visitor. */
+export const sent_visit = z.object({
+    // How many it kept: none with a test key, nor of a bot
+    kept: z.number(),
+    // Whether the app remembers the visitor: sets or renews its `visitor`
+    // cookie when true, and clears it when false
+    remembered: z.boolean(),
+    // Whether the page asks the visitor before they're remembered
+    ask: z.boolean()
+})
+
+/**
+ * Why Infra kept none of a call's events, the server's or a page's. Either
+ * is a bug in what the app sent, so sending them again won't help.
+ */
+export const events_refused = z.union([
+    // Not the call's shape: `fields` names what failed, like
+    // `events.0.name`
+    z
+        .object({ error: z.literal("invalid"), fields: z.array(z.string()) })
+        .transform(({ fields }) => ({ reason: "invalid" as const, fields })),
+    // Over the most a call's body can be, in bytes
+    z
+        .object({ error: z.literal("too-large"), limit: z.number() })
+        .transform(({ limit }) => ({ reason: "too-large" as const, limit }))
+])

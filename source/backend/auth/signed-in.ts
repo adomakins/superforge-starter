@@ -49,11 +49,15 @@ export function clearSessionCookie(context: Context) {
     })
 }
 
-// Everywhere but plain http on this computer, or a dev server reached over
-// plain http from another, where a browser won't keep a Secure cookie: the
-// build run with `pnpm preview`, or `pnpm dev`. Behind Railway's proxy a
-// request's own address says http, so the protocol alone can't say.
-function secureCookie(request_url: string) {
+/**
+ * Whether a cookie set in answer to `request_url` is `Secure`: everywhere
+ * but plain http on this computer, or a dev server reached over plain http
+ * from another, where a browser won't keep a Secure cookie: the build run
+ * with `pnpm preview`, or `pnpm dev`. Behind Railway's proxy a request's
+ * own address says http, though the browser's said https, so the protocol
+ * alone can't say. The visitor's cookies follow it too (visits/cookies.ts).
+ */
+export function secureCookie(request_url: string) {
     const { protocol, hostname } = new URL(request_url)
     const local = ["localhost", "127.0.0.1", "[::1]"].includes(hostname)
     return !(protocol === "http:" && (local || import.meta.env.DEV))

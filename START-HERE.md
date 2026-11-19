@@ -42,6 +42,21 @@ Ask for each of these. The answers go into PRODUCT.md and DESIGN.md (step
 12. **Its own people's email addresses**, starting with the owner's: they
     see the whole dashboard (the people who can sign in, and the work
     running in the background) from the first time they sign in.
+13. **Where is the business based, and do you want visitors asked
+    before they're remembered?** Once the app is on Superforge Infra, its
+    pages count what visitors view and click, for the owner's dashboard,
+    and the site can remember a visitor's browser between visits, so their
+    visits join up. Say plainly: by default the site sets a lasting cookie
+    on every visitor, with no banner, and Infra keeps the IP address of
+    each visitor it remembers; the EU and the UK generally require a
+    visitor's consent for that. A business based in the EU can
+    have a small banner ask everyone first; one based elsewhere can have
+    it ask only visitors where those rules apply, and remember everyone
+    else; and one that wants nothing kept on anyone's browser can turn
+    remembering off. Whoever isn't remembered is still counted, a day at
+    a time. This is how the site behaves, not legal advice: an owner who
+    needs to know what the law asks of them should ask someone qualified
+    to say.
 
 ## 2. Make it look like the business
 
@@ -110,6 +125,23 @@ Then say who signs in, from step 1's answers, in `ACCESS` in
   those two, like technicians and customers, add the roles to `ROLES` in
   `source/utilities/schemas/users.ts` (`workbench/writing-code.md`,
   "Roles and who can sign in").
+
+Then say whom the site remembers, from step 1's answer, in
+`VISITOR_MODE` in `source/utilities/visitors.ts`:
+
+- **`"remember"`**, as it ships: everyone, with no banner. Keep it when
+  the owner has no other answer.
+- **`"ask"`**: for a business based in the EU. The banner asks everyone,
+  and only those who accept are remembered.
+- **`"ask-in-eu"`**: for a business based elsewhere that wants visitors
+  asked where the EU's and the UK's rules apply. The banner asks them,
+  and everyone else is remembered.
+- **`"never"`**: for an owner who wants nothing kept on anyone's
+  browser. No one is remembered or asked.
+
+The banner (`source/frontend/components/site/consent-banner.tsx`) shows
+only in `"ask"` and `"ask-in-eu"`, to a visitor who hasn't answered; put
+its words in the business's voice too.
 
 ## 4. Write PRODUCT.md and DESIGN.md
 

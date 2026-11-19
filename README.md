@@ -18,6 +18,7 @@ sets the colors, fonts, logo and copy, and writes `PRODUCT.md` and
 | Workflow  | DBOS, for background work that picks up where it stopped, in the same Postgres                    |
 | Sign-in   | A code or a link by email, sent by Superforge Infra; the users and sessions are yours             |
 | Dashboard | Behind sign-in: your people and your workflows' runs, live, for your team; everyone's own account |
+| Visits    | What visitors view and click, through your server to Superforge Infra, asking first if you choose |
 | Tests     | Vitest on a real Postgres, a database of each test's own                                          |
 | Deploys   | Railway, as code (`.railway/railway.ts`), from each merge to `main` once CI passes                |
 
@@ -32,7 +33,7 @@ source/
 public/          static files, like the favicon
 workbench/       docs and scripts for working on the repo
 .railway/        the Railway project, as code
-.superforge/     which template this came from, and its release
+.superforge/     which template this came from, its release, and its Infra project
 ```
 
 ## Develop
