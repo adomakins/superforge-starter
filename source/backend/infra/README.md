@@ -5,8 +5,9 @@ Superforge Infra is the backend services this app runs on, at
 app calls it through: a route or a workflow's step calls
 `context.var.infra`, never a bare `fetch` to Infra
 (`workbench/writing-code.md`, "A call to an outside service"). For now
-Infra does two things for the app: sign-in, and keeping its events, what
-happened in it, for the owner's dashboard.
+Infra does three things for the app: sign-in; keeping its events, what
+happened in it, for the owner's dashboard; and keeping its comments, what
+its people said about it from the toolbar.
 
 ## Sign-in
 
@@ -160,6 +161,54 @@ keeps none, as a test key's are, so a test that sends a wrong one fails.
 Infra keeps each sign-in it verifies as a `sign-in` event of its own, so
 the app needn't send one.
 
+## Comments: `fileComment`
+
+Whoever's signed in gets the toolbar on every page
+(`frontend/components/toolbar/`): they click an element and write what
+should change, and the page posts it to the app's own `POST /api/comments`
+(`backend/comments/routes.ts`), behind `signedIn`, so a visitor can't file
+one. The server adds who they are and calls
+`context.var.infra.fileComment`, `POST /v1/comments` with the key, and
+Infra keeps it for the owner and their agents to act on:
+
+```ts
+context.var.infra.fileComment({
+    body: "This button sits too close to the edge on a phone",
+    path: "/pricing",
+    title: "Pricing",
+    element: {
+        selector: "body > div > main > section:nth-of-type(2) > a",
+        tag: "a",
+        text: "Book a call",
+        classes: "inline-flex rounded-md bg-primary px-4",
+        box: { x: 120, y: 1640, width: 180, height: 44 }
+    },
+    viewport: { width: 1440, height: 900 },
+    user: user.id,
+    user_agent: "Mozilla/5.0 (Macintosh; …)"
+})
+```
+
+- `body`, `path`, `title`, `element` and `viewport` are the toolbar's,
+  checked by `page_comment` (`utilities/schemas/comments.ts`): the
+  toolbar's README has how it describes the element, and what it never
+  sends.
+- `user` is the signed-in user's ID, never their email, and `user_agent`
+  their `User-Agent`, for what they were on, which Infra doesn't keep.
+
+| Infra answers                                     | The wrapper's result          | `/api/comments` answers   |
+| ------------------------------------------------- | ----------------------------- | ------------------------- |
+| 201 `{ comment: { id, created_at } }`             | `ok`, with `id`, `created_at` | 201, the same             |
+| 400 `invalid`, the `fields` that failed           | `invalid`, `fields`, logged   | 502 `refused`: a bug here |
+| 413 `too-large`                                   | `too-large`, `limit`, logged  | The same                  |
+| 401 (a key it refused), anything else, or nothing | `unavailable`, logged         | 503 `unavailable`         |
+
+Infra keeps a test key's comments too, marked as a test's, since they're
+about the app as it is on someone's computer. The stand-in checks a
+comment as Infra does, keeps none, and in a dev server logs each. A
+comment is never sent again: one sent twice is kept twice, so the page
+keeps what was written and the person saves it again.
+
 ## Keys
 
 Each copy of this codebase is a **project** on Infra, made on
@@ -206,11 +255,14 @@ both at once; without it, the server calls the real one (`INFRA_URL` in
   the field rules the pages share (`utilities/schemas/events.ts`).
 - `visits.ts`: a batch of a page's events, with its visitor and the
   app's mode, checked as Infra checks it.
+- `comments.ts`: a comment from the toolbar, with who filed it, checked
+  as Infra checks it.
 - `client.ts`: Infra over HTTP with a key, its answers parsed with them.
   No call is retried: a second start would send a second email, and
   events sent again are kept twice.
 - `stand-in.ts`: Infra's test mode, in memory, which answers a page's
-  events by the app's mode as Infra answers a visitor it can't place.
+  events by the app's mode as Infra answers a visitor it can't place, and
+  checks a comment and keeps none.
 - `choose.ts`: which of them the server uses, and reading a checkout's
   `.env`.
 

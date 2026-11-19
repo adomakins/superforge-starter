@@ -207,6 +207,9 @@ function unavailableInfra(): Infra {
         },
         async sendVisit() {
             return unavailable
+        },
+        async fileComment() {
+            return unavailable
         }
     }
 }

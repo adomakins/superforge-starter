@@ -1,6 +1,8 @@
 import { SECOND } from "@/utilities/primitives/durations"
 import {
+    comment_refused,
     events_refused,
+    kept_comment,
     sent_events,
     sent_visit,
     start_refused,
@@ -27,9 +29,9 @@ const UNAVAILABLE: InfraUnavailable = { reason: "unavailable" }
  * Infra, called over HTTP with a project's key: a secret key in a build, a
  * test key in a dev server. No call is retried, since none is safe to send
  * twice (a second start sends a second email, a second verify finds the
- * code spent, and events sent again are kept twice); the visitor asks
- * again instead, and an event that didn't go is lost. `send` is `fetch`,
- * or a test's own.
+ * code spent, and events and comments sent again are kept twice); the
+ * visitor asks again instead, and an event that didn't go is lost. `send`
+ * is `fetch`, or a test's own.
  */
 export function infraClient({
     key,
@@ -169,6 +171,35 @@ export function infraClient({
                     // What the app sent is wrong, which only a change here
                     // fixes
                     console.error("Infra refused a page's events", {
+                        call,
+                        status: answer.status,
+                        refused: parsed.data
+                    })
+                    return { ok: false, error: parsed.data }
+                } else {
+                    return unexpected(call, answer)
+                }
+            }
+        },
+
+        async fileComment(comment) {
+            const call = "/comments"
+            const answer = await post(call, comment)
+            if (answer === null) {
+                return { ok: false, error: UNAVAILABLE }
+            } else if (answer.status === 201) {
+                const parsed = kept_comment.safeParse(answer.json)
+                if (parsed.success) {
+                    return { ok: true, data: parsed.data }
+                } else {
+                    return unexpected(call, answer)
+                }
+            } else {
+                const parsed = comment_refused.safeParse(answer.json)
+                if (parsed.success) {
+                    // What the app sent is wrong, which only a change here
+                    // fixes
+                    console.error("Infra refused a comment", {
                         call,
                         status: answer.status,
                         refused: parsed.data

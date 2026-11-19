@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router"
 import { type ReactNode, useEffect } from "react"
 import { ConsentBanner } from "@/frontend/components/site/consent-banner"
+import { Toolbar } from "@/frontend/components/toolbar/toolbar"
 import appCss from "@/frontend/styles.css?url"
 import { startVisitors } from "@/frontend/visitors"
 
@@ -42,7 +43,8 @@ export const Route = createRootRouteWithContext<{
 // page records what its visitors view, click and run into, for the owner's
 // dashboard on Superforge Infra, from an effect, so only ever in the
 // browser, and asks first, in the banner, when the server says to
-// (frontend/visitors/).
+// (frontend/visitors/). Whoever's signed in gets the toolbar on every page,
+// to comment on what they see (components/toolbar/).
 function Root() {
     const { queryClient } = Route.useRouteContext()
     const router = useRouter()
@@ -51,6 +53,7 @@ function Root() {
         <QueryClientProvider client={queryClient}>
             <Outlet />
             <ConsentBanner />
+            <Toolbar />
         </QueryClientProvider>
     )
 }

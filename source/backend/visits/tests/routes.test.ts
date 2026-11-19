@@ -41,7 +41,8 @@ function recordingInfra(sendVisit?: Infra["sendVisit"]) {
         sendVisit: async (visit) => {
             sent.push(visit)
             return await (sendVisit ?? stand_in.sendVisit)(visit)
-        }
+        },
+        fileComment: (comment) => stand_in.fileComment(comment)
     }
     return { infra, sent }
 }
