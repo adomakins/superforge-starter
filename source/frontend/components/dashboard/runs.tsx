@@ -151,8 +151,7 @@ export function RunDetailPane({ id }: { id: string }) {
                 <BackToList to="/dashboard/workflows">Workflows</BackToList>
                 {failure.reason === "not-found" ? (
                     <p className="text-muted-foreground text-sm">
-                        There's no run with this id. Runs are pruned a week
-                        after they finish.
+                        There's no run with this id.
                     </p>
                 ) : (
                     <CouldNotLoad

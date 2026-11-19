@@ -77,7 +77,8 @@ order, and DBOS refuses one whose step names don't match (it fails with
   goes after the last, or behind `DBOS.patch()`, which `enablePatching`
   turns on, for a run started before it to skip.
 - **Anything bigger is a new workflow** with a new name. The old one stays
-  in `WORKFLOWS` until its runs have finished; they're pruned a week after.
+  in `WORKFLOWS` until its runs have finished. Once it's gone, its runs
+  stay on the Workflows screen under its name.
 
 Never delete DBOS's rows by hand, nor write to its tables.
 
@@ -122,9 +123,14 @@ Never delete DBOS's rows by hand, nor write to its tables.
   run while the version before still serves, like ours. DBOS is pinned to
   an exact version for that reason: read its release notes before raising
   it.
-- **Finished runs are pruned** a week after they finish, about once an
-  hour (`pruneFinishedRuns`), with their steps, inputs and outputs. DBOS
-  never prunes on its own.
+- **Finished runs are kept for good**, with their steps, inputs and
+  outputs, so the Workflows screen opens one from months ago as it does
+  one from today. DBOS never deletes a run on its own, and its tables gain
+  a row with every step, which steps that return little keep small. A
+  copy whose runs grow too many for its database sets `KEEP_FINISHED_FOR`
+  (`engine.ts`) to a duration, like `90 * DAY`, and the runs that finished
+  longer ago than that are then pruned about once an hour
+  (`pruneFinishedRuns`).
 - **Connections**, of the 500 Railway's Postgres allows: the app's pool
   keeps 10, DBOS's 10, its client 2 (only until DBOS has launched there),
   and the gate 1. So a process holds at most 23, and the two running while
@@ -140,6 +146,7 @@ never its tables, which are DBOS's to change (`engine.ts`):
 
 - **`runs()`**, the latest hundred, newest first, through
   `listWorkflows`, with each one's input and, for a failed one, its error.
+  An older run isn't listed, but still opens by its id.
 - **`run(id)`**, one with what it returned and each step it has
   finished, through `listWorkflowSteps`. DBOS records a step once it has
   returned, so a run that's working shows the steps before the one it's

@@ -117,8 +117,28 @@ whatever read it likes and never touches Infra's database.
   tell a copy already has it: `source/backend/infra/query.ts` exists, and
   `Infra` in `source/backend/infra/index.ts` has `query`.
 
+Workflow runs, kept for good: a finished run and its steps stay, rather
+than being deleted a week after it ends, so a workflow's history reaches
+back as far as the app does, for workflows that follow a customer for
+months.
+
+- **Keeping finished runs**, machinery: `KEEP_FINISHED_FOR` in
+  `source/backend/workflows/engine.ts` is `"forever"`, and the engine
+  schedules no pruning then (`pruneOnSchedule`). A copy whose runs grow
+  too many for its database sets it to a duration, like `90 * DAY`, and
+  `pruneFinishedRuns` deletes the runs that finished longer ago than that
+  about once an hour, as it did a week's. The workflows README says so,
+  and the run screen's not-found note no longer says runs are pruned a
+  week after they finish (`frontend/components/dashboard/runs.tsx`). How
+  to tell a copy already has it: `engine.ts` has `pruneOnSchedule`.
+
 Flags:
 
+- **A change in how something works**: workflow runs are no longer
+  deleted a week after they finish, so DBOS's tables (in the `dbos`
+  schema) grow by a row for every step from the update on. A copy that
+  wants the week back sets `KEEP_FINISHED_FOR` to `WEEK`. The runs
+  deleted before the update are gone.
 - **A change in how something works**: every object that is an `Infra`,
   like a test's fake of it, needs a `query`, as
   `backend/auth/tests/routes.test.ts`'s do, beside the `fileComment`
