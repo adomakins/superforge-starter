@@ -86,6 +86,46 @@ the AI that builds the app to work through later.
   doesn't the toolbar's. How to tell a copy already has it: `browser.ts`
   checks `data-untracked`.
 
+Queries, on Superforge Infra: the app's own SQL over its project's
+events, for dashboards of its own, like a copy's web analytics. Infra
+runs each call in a DuckDB database of the call's own, holding only that
+project's events, as two tables, `events` and `visits`, so the app writes
+whatever read it likes and never touches Infra's database.
+
+- **`query`, on the Infra wrapper**, machinery: `Infra`
+  (`source/backend/infra/index.ts`) gains `query`, which sends Infra's
+  `POST /v1/query` with the key: named queries that share one read of
+  the events, with their `$1` or `$name` parameters, how many `days` back
+  to read (90 at most) and the IANA `time_zone` days count in
+  (`query.ts`'s `QueryRequest`). It answers the `window` it read and each
+  query's rows (`columns`, `rows`, `truncated` past 10,000), or why that
+  one has none (`one-select`, `sql` with DuckDB's message, or
+  `too-slow`), so one broken query doesn't cost the others; a refused
+  call answers `invalid` or `too-many-events` and is logged (`queried`
+  and `query_refused` in `answers.ts`, the types `Queried` and
+  `QueryRefused` in `index.ts`). `client.ts` gives it 60 seconds rather
+  than 15, since Infra gives each query up to ten. A test key reads the
+  project's real events; the stand-in (`stand-in.ts`) answers every query
+  with no rows, and in a dev server logs that `INFRA_TEST_KEY` reads
+  them; and the Infra a build gets with no key (`choose.ts`) answers it
+  unavailable. The tests' own Infras (`auth/tests/events.test.ts`,
+  `auth/tests/routes.test.ts`, `visits/tests/routes.test.ts`) gain
+  `query`, and `infra/tests/` tries the client and the stand-in on it.
+  The README's "Query: `query`" has the call, and its warning: wrap
+  DuckDB's `->>` in parentheses, `(properties ->> 'target') = 'book'`,
+  since DuckDB binds it looser than `and`. No screen uses it yet. How to
+  tell a copy already has it: `source/backend/infra/query.ts` exists, and
+  `Infra` in `source/backend/infra/index.ts` has `query`.
+
+Flags:
+
+- **A change in how something works**: every object that is an `Infra`,
+  like a test's fake of it, needs a `query`, as
+  `backend/auth/tests/routes.test.ts`'s do, beside the `fileComment`
+  above. A copy that already added its own `query` for `/v1/query` takes
+  the template's in its place, since `backend/infra/` is machinery an
+  update replaces, and keeps its own dashboards that call it.
+
 ## 0.4.0 (2026-11-18)
 
 What visitors do on the site, kept by Superforge Infra as events for the

@@ -269,3 +269,43 @@ test("a dev server's stand-in logs each batch, since nothing keeps it", async ()
         visit("ask").events
     )
 })
+
+test("every query answers no rows, and a dev server's stand-in says a test key reads the events", async () => {
+    const logged = vi.spyOn(console, "info").mockImplementation(() => {})
+    const request = {
+        queries: {
+            visits: { sql: "select count(*) as visits from visits" },
+            pages: { sql: "select path from events" }
+        },
+        days: 7,
+        time_zone: "America/New_York"
+    }
+    const asked = await standInInfra().query(request)
+    expect(asked).toEqual({
+        ok: true,
+        data: {
+            window: {
+                since: expect.any(Date),
+                days: 7,
+                time_zone: "America/New_York",
+                events: 0
+            },
+            results: {
+                visits: {
+                    ok: true,
+                    data: { columns: [], rows: [], truncated: false }
+                },
+                pages: {
+                    ok: true,
+                    data: { columns: [], rows: [], truncated: false }
+                }
+            }
+        }
+    })
+    expect(logged).not.toHaveBeenCalled()
+    await standInInfra({ logs: true }).query(request)
+    expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining("INFRA_TEST_KEY"),
+        { queries: ["visits", "pages"] }
+    )
+})

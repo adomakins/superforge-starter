@@ -3,6 +3,8 @@ import {
     comment_refused,
     events_refused,
     kept_comment,
+    queried,
+    query_refused,
     sent_events,
     sent_visit,
     start_refused,
@@ -20,8 +22,11 @@ import type { Infra, InfraUnavailable } from "./index"
 export const INFRA_URL = "https://infra.superforge.studio/v1"
 
 // How long a call waits for Infra's answer. Starting a sign-in waits on
-// Infra sending the email, which takes a second or two.
+// Infra sending the email, which takes a second or two. A call's queries
+// wait longer: Infra reads the events, then gives each query up to ten
+// seconds.
 const TIMEOUT = 15 * SECOND
+const QUERY_TIMEOUT = 60 * SECOND
 
 const UNAVAILABLE: InfraUnavailable = { reason: "unavailable" }
 
@@ -44,7 +49,7 @@ export function infraClient({
 }): Infra {
     // One call: its status and its JSON, or null when it never answered or
     // answered something that isn't JSON, which is logged
-    async function post(call: string, body: unknown) {
+    async function post(call: string, body: unknown, timeout = TIMEOUT) {
         const response = await send(`${url}${call}`, {
             method: "POST",
             headers: {
@@ -52,7 +57,7 @@ export function infraClient({
                 "Content-Type": "application/json"
             },
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(TIMEOUT)
+            signal: AbortSignal.timeout(timeout)
         }).catch((error: unknown) => {
             console.error("Infra didn't answer", { call, error })
             return null
@@ -200,6 +205,35 @@ export function infraClient({
                     // What the app sent is wrong, which only a change here
                     // fixes
                     console.error("Infra refused a comment", {
+                        call,
+                        status: answer.status,
+                        refused: parsed.data
+                    })
+                    return { ok: false, error: parsed.data }
+                } else {
+                    return unexpected(call, answer)
+                }
+            }
+        },
+
+        async query(request) {
+            const call = "/query"
+            const answer = await post(call, request, QUERY_TIMEOUT)
+            if (answer === null) {
+                return { ok: false, error: UNAVAILABLE }
+            } else if (answer.status === 200) {
+                const parsed = queried.safeParse(answer.json)
+                if (parsed.success) {
+                    return { ok: true, data: parsed.data }
+                } else {
+                    return unexpected(call, answer)
+                }
+            } else {
+                const parsed = query_refused.safeParse(answer.json)
+                if (parsed.success) {
+                    // A call's shape is a bug here, and too many events
+                    // asks the app for fewer days
+                    console.error("Infra ran none of the app's queries", {
                         call,
                         status: answer.status,
                         refused: parsed.data

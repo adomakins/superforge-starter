@@ -23,7 +23,8 @@ function recordingInfra(sendEvents?: Infra["sendEvents"]) {
             return await (sendEvents ?? stand_in.sendEvents)(events)
         },
         sendVisit: (visit) => stand_in.sendVisit(visit),
-        fileComment: (comment) => stand_in.fileComment(comment)
+        fileComment: (comment) => stand_in.fileComment(comment),
+        query: (request) => stand_in.query(request)
     }
     return { infra, sent }
 }

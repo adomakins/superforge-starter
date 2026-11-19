@@ -210,6 +210,9 @@ function unavailableInfra(): Infra {
         },
         async fileComment() {
             return unavailable
+        },
+        async query() {
+            return unavailable
         }
     }
 }

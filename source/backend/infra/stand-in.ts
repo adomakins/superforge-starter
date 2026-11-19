@@ -1,5 +1,5 @@
 import { randomToken } from "@/backend/auth/tokens"
-import { MINUTE } from "@/utilities/primitives/durations"
+import { DAY, MINUTE } from "@/utilities/primitives/durations"
 import { COMMENT_BODY_LIMIT } from "@/utilities/schemas/comments"
 import { EVENTS_BODY_LIMIT } from "@/utilities/schemas/events"
 import type { VisitorMode } from "@/utilities/visitors"
@@ -31,14 +31,16 @@ export type WaitingSignIn = {
  * none is kept; a page's are answered by the app's mode as Infra answers
  * them for a visitor it can't place (`treatment`). A comment is checked
  * too, and answered an ID, though nothing keeps it, where Infra keeps a
- * test key's. The tests always use it, so they never reach Infra, and so
- * does a dev server with no test key (choose.ts). A build never does:
- * anyone could sign in as anyone, since the page shows the code.
+ * test key's. Every query answers no rows, since there are no events to
+ * read, where a test key reads the project's real ones. The tests always
+ * use it, so they never reach Infra, and so does a dev server with no test
+ * key (choose.ts). A build never does: anyone could sign in as anyone,
+ * since the page shows the code.
  *
  * `waiting` is where it keeps what it sent, by address: its own, or one
  * that outlives a dev server's reloads. With `logs`, as a dev server has
  * it, each batch of a page's events is logged, and each comment, since
- * nothing keeps them.
+ * nothing keeps them, and each call of queries, which need a test key.
  */
 export function standInInfra({
     waiting = new Map(),
@@ -196,6 +198,42 @@ export function standInInfra({
             return {
                 ok: true,
                 data: { id: crypto.randomUUID(), created_at: new Date() }
+            }
+        },
+
+        // The stand-in keeps no events and runs no SQL, so every query
+        // answers no rows: a dev server shows the project's real ones with
+        // a test key (choose.ts)
+        async query({ queries, days, time_zone }) {
+            if (logs) {
+                console.info(
+                    "Infra's stand-in runs no SQL, so every query answers no rows. Set INFRA_TEST_KEY to read the project's events.",
+                    { queries: Object.keys(queries) }
+                )
+            }
+            return {
+                ok: true,
+                data: {
+                    window: {
+                        since: new Date(Date.now() - days * DAY),
+                        days,
+                        time_zone,
+                        events: 0
+                    },
+                    results: Object.fromEntries(
+                        Object.keys(queries).map((name) => [
+                            name,
+                            {
+                                ok: true as const,
+                                data: {
+                                    columns: [],
+                                    rows: [],
+                                    truncated: false
+                                }
+                            }
+                        ])
+                    )
+                }
             }
         }
     }

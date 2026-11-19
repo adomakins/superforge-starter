@@ -201,7 +201,8 @@ function refusing(
         fileComment: async () => ({
             ok: false,
             error: { reason: "unavailable" }
-        })
+        }),
+        query: async () => ({ ok: false, error: { reason: "unavailable" } })
     }
 }
 
@@ -404,7 +405,8 @@ test("when only listed people may sign in, anyone else is refused before Infra i
             verifySignIn: (proof) => stand_in.verifySignIn(proof),
             sendEvents: (events) => stand_in.sendEvents(events),
             sendVisit: (visit) => stand_in.sendVisit(visit),
-            fileComment: (comment) => stand_in.fileComment(comment)
+            fileComment: (comment) => stand_in.fileComment(comment),
+            query: (request) => stand_in.query(request)
         }
     })
 

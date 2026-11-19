@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { expect, test, vi } from "vitest"
 import { infraClient } from "../client"
-import type { FiledComment, Visit } from "../index"
+import type { FiledComment, QueryRequest, Visit } from "../index"
 
 // The client against a fake of Infra's API, answering what Infra's README
 // says each call answers, so no test reaches the real one
@@ -458,4 +458,152 @@ test("a comment to an Infra that's down, or answers 200, is unavailable", async 
             error: { reason: "unavailable" }
         })
     }
+})
+
+// A call of two queries, one with parameters by position
+const QUERIES: QueryRequest = {
+    queries: {
+        visits: { sql: "select count(*) as visits from visits" },
+        pages: {
+            sql: "select path, count(*) as views from events where name = 'view' group by path order by views desc limit $1",
+            params: [10]
+        }
+    },
+    days: 30,
+    time_zone: "America/New_York"
+}
+
+test("queries go to /v1/query with the key, and answer each one's rows or why it has none", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const { infra, received } = fakeInfra({
+        status: 200,
+        body: {
+            window: {
+                since: "2026-10-20T04:00:00.000Z",
+                days: 30,
+                time_zone: "America/New_York",
+                events: 1520
+            },
+            results: {
+                visits: {
+                    columns: [{ name: "visits", type: "BIGINT" }],
+                    rows: [{ visits: 212 }],
+                    truncated: false
+                },
+                pages: { error: "too-slow", seconds: 10 }
+            }
+        }
+    })
+    expect(await infra.query(QUERIES)).toEqual({
+        ok: true,
+        data: {
+            window: {
+                since: new Date("2026-10-20T04:00:00.000Z"),
+                days: 30,
+                time_zone: "America/New_York",
+                events: 1520
+            },
+            results: {
+                visits: {
+                    ok: true,
+                    data: {
+                        columns: [{ name: "visits", type: "BIGINT" }],
+                        rows: [{ visits: 212 }],
+                        truncated: false
+                    }
+                },
+                pages: {
+                    ok: false,
+                    error: {
+                        reason: "too-slow",
+                        message: "It ran past 10 seconds and was stopped"
+                    }
+                }
+            }
+        }
+    })
+    expect(received).toEqual([
+        { path: "/v1/query", key: `Bearer ${KEY}`, body: QUERIES }
+    ])
+})
+
+test("a query DuckDB couldn't run says why, in DuckDB's words", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const message = 'Binder Error: Referenced column "pathh" not found'
+    const { infra } = fakeInfra({
+        status: 200,
+        body: {
+            window: {
+                since: "2026-10-20T04:00:00.000Z",
+                days: 30,
+                time_zone: "America/New_York",
+                events: 1520
+            },
+            results: { pages: { error: "sql", message } }
+        }
+    })
+    const asked = await infra.query(QUERIES)
+    expect(asked.ok && asked.data.results.pages).toEqual({
+        ok: false,
+        error: { reason: "sql", message }
+    })
+})
+
+test("queries Infra runs none of say why, and are logged", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+    const cases = [
+        {
+            answer: {
+                status: 400,
+                body: { error: "invalid", fields: ["time_zone"] }
+            },
+            refused: { reason: "invalid", fields: ["time_zone"] }
+        },
+        {
+            answer: {
+                status: 413,
+                body: { error: "too-many-events", most: 200000 }
+            },
+            refused: { reason: "too-many-events", most: 200000 }
+        }
+    ]
+    for (const { answer, refused } of cases) {
+        const { infra } = fakeInfra(answer)
+        expect(await infra.query(QUERIES)).toEqual({
+            ok: false,
+            error: refused
+        })
+    }
+    expect(logged).toHaveBeenCalledWith(
+        "Infra ran none of the app's queries",
+        expect.objectContaining({ status: 413 })
+    )
+})
+
+test("queries to an Infra that's down, or answers what the app doesn't expect, are unavailable", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    for (const answer of [
+        { status: 503, body: { error: "unavailable" } },
+        { status: 200, body: { rows: [] } },
+        { status: 401, body: { error: "unknown-key" } }
+    ]) {
+        const { infra } = fakeInfra(answer)
+        expect(await infra.query(QUERIES)).toEqual({
+            ok: false,
+            error: { reason: "unavailable" }
+        })
+    }
+    const down = infraClient({
+        key: KEY,
+        url: ADDRESS,
+        send: async () => {
+            throw new TypeError("fetch failed")
+        }
+    })
+    expect(await down.query(QUERIES)).toEqual({
+        ok: false,
+        error: { reason: "unavailable" }
+    })
 })
