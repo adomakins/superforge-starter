@@ -46,7 +46,13 @@ A patch release (`0.1.1`) fixes something; a minor release (`0.2.0`) adds
 or changes something. Until `1.0.0`, a minor release may also change how
 something already there works, which its notes flag.
 
-## Unreleased
+## 0.4.0 (2026-11-18)
+
+What visitors do on the site, kept by Superforge Infra as events for the
+owner's dashboard, all of it through the app's own server. Whom the site
+remembers, by a first-party cookie, is the owner's choice. And two pieces
+of machinery: CI tags each release, and the upgrade test fills `inet`
+columns.
 
 - **CI tags the template's releases**, machinery: a `release-tag` job in
   `.github/workflows/ci.yml`, after `check` on a push to `main`. In the
