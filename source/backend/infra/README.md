@@ -95,7 +95,8 @@ context.var.infra.sendVisit({
 - `visitor.ip` is Railway's `X-Real-IP` (`auth/visitor.ts`), for their
   country and to count a visitor who isn't remembered, and
   `visitor.user_agent` their `User-Agent`, for bots and their device.
-  Infra keeps neither.
+  Infra keeps the address only of a visitor it remembers, and never the
+  `User-Agent`.
 - `sent_at` and `events` are the page's batch as it sent it: at most 100
   events, in at most 64 KB (`utilities/schemas/visits.ts`).
 

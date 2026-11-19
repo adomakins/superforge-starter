@@ -107,10 +107,10 @@ asks them, and the stand-in, which places no one, treats it as `ask`.
 A remembered visitor is a lasting ID, a UUID, in the `visitor` cookie,
 which the server sets and renews with each batch Infra says to remember.
 Infra keeps their events under it, so their visits join up across days,
-with whoever they're signed in as. A visitor who isn't remembered has no
-`visitor` cookie, and the server clears one they had: Infra counts them
-as one visitor a day, by a hash it forgets once the day is over, and
-keeps no user of theirs.
+with whoever they're signed in as and their IP address. A visitor who
+isn't remembered has no `visitor` cookie, and the server clears one they
+had: Infra counts them as one visitor a day, by a hash it forgets once
+the day is over, and keeps no user or address of theirs.
 
 | Cookie            | Holds                                             | Set by                                     |
 | ----------------- | ------------------------------------------------- | ------------------------------------------ |

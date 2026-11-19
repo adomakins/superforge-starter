@@ -47,8 +47,9 @@ Ask for each of these. The answers go into PRODUCT.md and DESIGN.md (step
     pages count what visitors view and click, for the owner's dashboard,
     and the site can remember a visitor's browser between visits, so their
     visits join up. Say plainly: by default the site sets a lasting cookie
-    on every visitor, with no banner, and the EU and the UK generally
-    require a visitor's consent for that. A business based in the EU can
+    on every visitor, with no banner, and Infra keeps the IP address of
+    each visitor it remembers; the EU and the UK generally require a
+    visitor's consent for that. A business based in the EU can
     have a small banner ask everyone first; one based elsewhere can have
     it ask only visitors where those rules apply, and remember everyone
     else; and one that wants nothing kept on anyone's browser can turn

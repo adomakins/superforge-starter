@@ -102,7 +102,9 @@ chooses.
   GDPR applies, or whom Infra can't place, and remembers everyone else.
   `"ask"`: asks everyone, and remembers whoever accepts. `"never"`: no
   one, and no cookie. Infra applies it by the visitor's answer and
-  country; whoever isn't remembered is counted a day at a time.
+  country. It keeps a remembered visitor's IP address with their events;
+  whoever isn't remembered is counted a day at a time, and their address
+  isn't kept.
 - **The consent banner**, a starting point:
   `source/frontend/components/site/consent-banner.tsx`, drawn by the root
   route on every page, the dashboard's too, only in a browser, and only
