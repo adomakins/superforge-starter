@@ -115,3 +115,60 @@ export const kept_comment = z
  * a bug in what the app sent.
  */
 export const comment_refused = events_refused
+
+// One query's rows, with its columns, and whether there were more than the
+// 10,000 Infra answers
+const query_rows = z
+    .object({
+        columns: z.array(z.object({ name: z.string(), type: z.string() })),
+        rows: z.array(z.record(z.string(), z.unknown())),
+        truncated: z.boolean()
+    })
+    .transform((result) => ({ ok: true as const, data: result }))
+
+// Why one query has no rows: not one read (`one-select`), SQL DuckDB
+// couldn't run (`sql`, with its message), or too slow (`too-slow`). Kept as
+// a string, so a reason Infra adds later still reads.
+const query_failed = z
+    .object({
+        error: z.string(),
+        message: z.string().optional(),
+        seconds: z.number().optional()
+    })
+    .transform(({ error, message, seconds }) => ({
+        ok: false as const,
+        error: {
+            reason: error,
+            message:
+                message ??
+                (seconds === undefined
+                    ? error
+                    : `It ran past ${seconds} seconds and was stopped`)
+        }
+    }))
+
+/** What Infra read for a call's queries, and what each one answered. */
+export const queried = z.object({
+    window: z.object({
+        // How far back it read, ending now
+        since: z.iso.datetime().transform((value) => new Date(value)),
+        days: z.number(),
+        time_zone: z.string(),
+        // How many events it read
+        events: z.number()
+    }),
+    // Each query's rows, or why it has none, by the name the app gave it
+    results: z.record(z.string(), z.union([query_rows, query_failed]))
+})
+
+/** Why Infra ran none of a call's queries. */
+export const query_refused = z.union([
+    // Not the call's shape, which is a bug here
+    z
+        .object({ error: z.literal("invalid"), fields: z.array(z.string()) })
+        .transform(({ fields }) => ({ reason: "invalid" as const, fields })),
+    // More events in the window than one call reads: ask for fewer days
+    z
+        .object({ error: z.literal("too-many-events"), most: z.number() })
+        .transform(({ most }) => ({ reason: "too-many-events" as const, most }))
+])

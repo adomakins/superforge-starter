@@ -5,8 +5,9 @@ Superforge Infra is the backend services this app runs on, at
 app calls it through: a route or a workflow's step calls
 `context.var.infra`, never a bare `fetch` to Infra
 (`workbench/writing-code.md`, "A call to an outside service"). For now
-Infra does three things for the app: sign-in; keeping its events, what
-happened in it, for the owner's dashboard; and keeping its comments, what
+Infra does four things for the app: sign-in; keeping its events, what
+happened in it, for the owner's dashboard; running the app's own SQL over
+those events, for dashboards of its own; and keeping its comments, what
 its people said about it from the toolbar.
 
 ## Sign-in
@@ -209,6 +210,49 @@ comment as Infra does, keeps none, and in a dev server logs each. A
 comment is never sent again: one sent twice is kept twice, so the page
 keeps what was written and the person saves it again.
 
+## Query: `query`
+
+The app's own SQL over its project's events, for dashboards of its own,
+which `context.var.infra.query` sends as `POST /v1/query` with the key.
+Infra runs it in a DuckDB database of the call's own, which holds only
+this project's events from the last `days` days (90 at most), as two
+tables: `events`, every event, and `visits`, a visit a row with where it
+landed, where it came from and whether it bounced. Infra's own docs (the
+Superforge MCP's `read_infra_docs`, "Query") have every column, the
+limits and recipes to start from.
+
+```ts
+const asked = await context.var.infra.query({
+    queries: {
+        visits: { sql: "select count(*) as visits from visits" },
+        pages: {
+            sql: "select path, count(*) as views from events where name = 'view' group by path order by views desc limit $1",
+            params: [10]
+        }
+    },
+    days: 30,
+    time_zone: "America/New_York"
+})
+```
+
+The queries share one read of the events, and each answers its own rows
+or why it has none (`results.<name>`, an `OperationResult`: `one-select`,
+`sql` with DuckDB's message, or `too-slow`), so one broken query doesn't
+cost the others. The SQL is DuckDB's: **wrap `->>` in parentheses**,
+`(properties ->> 'target') = 'book'`, since DuckDB binds it looser than
+`and`, and `name = 'click' and properties ->> 'target' = 'book'` fails
+with a conversion error. A test key reads the project's real events, and
+the stand-in answers every query with no rows, so a dev server shows real
+numbers only with a test key (`choose.ts`). A call waits up to a minute,
+since Infra gives each query up to ten seconds.
+
+| Infra answers                                     | The wrapper's result                    |
+| ------------------------------------------------- | --------------------------------------- |
+| 200 `{ window, results }`                         | `ok`, with each query's rows or its why |
+| 400 `invalid`, the `fields` that failed           | `invalid`, `fields`, logged: a bug here |
+| 413 `too-many-events`, the `most` a call reads    | `too-many-events`, logged: fewer `days` |
+| 401 (a key it refused), anything else, or nothing | `unavailable`, logged                   |
+
 ## Keys
 
 Each copy of this codebase is a **project** on Infra, made on
@@ -223,7 +267,9 @@ once as it's made:
 | Test key, `sf_test_…`     | `INFRA_TEST_KEY` in the checkout's `.env` (`.env.example`)                 | not sent: Infra answers the code, which the dev server shows |
 
 A test key's events are checked and none is kept, the pages' too, which
-go through the server like everything else.
+go through the server like everything else. Its queries read the
+project's real events, as a secret key's do, since reading changes
+nothing.
 
 Which one the server uses is decided once, as it starts (`choose.ts`):
 
@@ -257,12 +303,13 @@ both at once; without it, the server calls the real one (`INFRA_URL` in
   app's mode, checked as Infra checks it.
 - `comments.ts`: a comment from the toolbar, with who filed it, checked
   as Infra checks it.
+- `query.ts`: what a call of SQL over the project's events asks.
 - `client.ts`: Infra over HTTP with a key, its answers parsed with them.
   No call is retried: a second start would send a second email, and
   events sent again are kept twice.
 - `stand-in.ts`: Infra's test mode, in memory, which answers a page's
-  events by the app's mode as Infra answers a visitor it can't place, and
-  checks a comment and keeps none.
+  events by the app's mode as Infra answers a visitor it can't place,
+  checks a comment and keeps none, and answers every query with no rows.
 - `choose.ts`: which of them the server uses, and reading a checkout's
   `.env`.
 

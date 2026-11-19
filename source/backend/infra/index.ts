@@ -4,6 +4,8 @@ import type {
     comment_refused,
     events_refused,
     kept_comment,
+    queried,
+    query_refused,
     sent_events,
     sent_visit,
     start_refused,
@@ -14,6 +16,7 @@ import type {
 import { chooseInfra } from "./choose"
 import type { FiledComment } from "./comments"
 import type { ServerEvent } from "./events"
+import type { QueryRequest } from "./query"
 import type { Visit } from "./visits"
 
 // Superforge Infra, the backend services this app runs on, through the one
@@ -21,10 +24,10 @@ import type { Visit } from "./visits"
 // else (workbench/writing-code.md, "A call to an outside service"). For now
 // it's sign-in, where Infra emails a visitor a code and a link, and says
 // whether what they brought back is right; events, what happened in the
-// app, for the owner's dashboard: the pages' and the server's; and
-// comments, what the app's people said about it from the toolbar. The app
-// keeps its own users and sessions (backend/auth/). README.md here has the
-// calls.
+// app, for the owner's dashboard: the pages' and the server's; SQL over
+// those events, for the app's own dashboards; and comments, what the app's
+// people said about it from the toolbar. The app keeps its own users and
+// sessions (backend/auth/). README.md here has the calls.
 
 /** What the app asks of Infra, whichever answers: the real one or the stand-in. */
 export type Infra = {
@@ -79,6 +82,15 @@ export type Infra = {
     fileComment(
         comment: FiledComment
     ): AsyncOperation<KeptComment, CommentRefused | InfraUnavailable>
+    /**
+     * Runs the app's own SQL over the project's events from its last
+     * `days` days (query.ts), each query by its name, over one read of
+     * them: each one's rows, or why it has none. A test key reads the
+     * project's real events, and the stand-in reads none.
+     */
+    query(
+        request: QueryRequest
+    ): AsyncOperation<Queried, QueryRefused | InfraUnavailable>
 }
 
 // What Infra answers, as the app sees it (answers.ts has each field)
@@ -90,7 +102,9 @@ export type SentVisit = z.output<typeof sent_visit>
 export type EventsRefused = z.output<typeof events_refused>
 export type KeptComment = z.output<typeof kept_comment>
 export type CommentRefused = z.output<typeof comment_refused>
-export type { FiledComment, ServerEvent, Visit }
+export type Queried = z.output<typeof queried>
+export type QueryRefused = z.output<typeof query_refused>
+export type { FiledComment, QueryRequest, ServerEvent, Visit }
 
 /**
  * Infra couldn't be asked: no key in a build, a key it refused, or an
