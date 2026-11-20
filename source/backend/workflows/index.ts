@@ -1,5 +1,6 @@
 import { tellTeamOfSignUp } from "@/backend/users/workflows"
 import type { Workflow } from "./define"
+import type { Runner } from "./runners"
 
 /**
  * Every workflow there is, from each feature's `workflows.ts`, registered
@@ -15,3 +16,10 @@ import type { Workflow } from "./define"
  * "Changing a workflow").
  */
 export const WORKFLOWS: Workflow[] = [tellTeamOfSignUp]
+
+/**
+ * Every runner there is (runners.ts): what checks for something due, every
+ * few seconds, while this process runs the workflows. A feature's goes here
+ * the moment it's defined.
+ */
+export const RUNNERS: Runner[] = []

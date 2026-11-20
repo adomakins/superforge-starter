@@ -5,9 +5,10 @@ import { appDatabase, appDatabaseUrl } from "@/database"
 import { appStorage } from "@/database/storage"
 import { HOUR, MINUTE } from "@/utilities/primitives/durations"
 import { register, type Workflow, type Workflows } from "./define"
-import { WORKFLOWS } from "./index"
+import { RUNNERS, WORKFLOWS } from "./index"
 import { type WorkflowDependencies, workflowsProcess } from "./process"
 import { QUEUES } from "./queues"
+import { startRunners } from "./runners"
 import { retryFrom, runOf, runWithStepsOf } from "./runs"
 
 // DBOS in the server: a library that runs workflows in this process and
@@ -45,13 +46,14 @@ const START_AGAIN_AFTER = MINUTE
 // What trying for the gate answers
 const taken_row = z.object({ taken: z.boolean() })
 
-/** The server's own: its database and bucket, and every workflow. */
+/** The server's own: its database and bucket, every workflow and runner. */
 export function appWorkflowDependencies(): WorkflowDependencies {
     return {
         database: appDatabase(),
         storage: appStorage(),
         database_url: appDatabaseUrl(),
-        workflows: WORKFLOWS
+        workflows: WORKFLOWS,
+        runners: RUNNERS
     }
 }
 
@@ -143,6 +145,11 @@ async function launch(dependencies: WorkflowDependencies, session: number) {
     going()
 
     held.pruning = pruneOnSchedule(KEEP_FINISHED_FOR)
+    held.stop_runners = startRunners(dependencies.runners ?? [], {
+        database: dependencies.database,
+        storage: dependencies.storage,
+        workflows: dbosWorkflows
+    })
     console.info("The workflows are running", {
         application_version: DBOS.applicationVersion
     })
@@ -157,17 +164,19 @@ async function launch(dependencies: WorkflowDependencies, session: number) {
  */
 export async function stopWorkflows() {
     const held = workflowsProcess()
-    const { gate, client, pruning } = held
+    const { gate, client, pruning, stop_runners } = held
     held.session += 1
     Object.assign(held, {
         starting: null,
         gate: null,
         pruning: null,
+        stop_runners: null,
         client: null
     })
     if (pruning !== null) {
         clearInterval(pruning)
     }
+    stop_runners?.()
     if (DBOS.isInitialized()) {
         await DBOS.shutdown()
     }
