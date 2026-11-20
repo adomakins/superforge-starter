@@ -23,9 +23,126 @@ export type ObjectStore = {
     ): Promise<void>
     /** The bytes kept under `key`, or null when nothing is. */
     get(key: string): Promise<Uint8Array<ArrayBuffer> | null>
+    /**
+     * What's kept under `key` as it streams, all of it or the bytes in
+     * `range`, without holding it in memory: for a large file sent on to a
+     * browser, like a video, which asks for it a range at a time.
+     */
+    open(key: string, range?: ByteRange): AsyncOperation<Opened, OpenFailure>
     /** Deletes what's kept under `key`, if anything is. */
     delete(key: string): Promise<void>
+    /**
+     * A page of the files kept under `prefix`, in key order, each with its
+     * size and when it was kept. With `folders`, the folders right under
+     * `prefix` come back in place of what's inside them, as a screen of a
+     * folder shows them. A page holds at most `limit` of the two together
+     * (1,000 at most, and by default), and its `cursor` asks for the next.
+     */
+    list(prefix: string, options?: ListOptions): Promise<Listing>
+    /** What's kept under `key`, without its bytes, or null when nothing is. */
+    head(key: string): Promise<FileDetails | null>
+    /**
+     * A link that reads what's kept under `key` without credentials, for
+     * `seconds`, so a browser fetches a file straight from the bucket. Only
+     * the bucket can sign one: a dev server's folder fails
+     * `not-presignable`, and its caller serves the file itself (`open`).
+     */
+    presignGet(
+        key: string,
+        options: PresignGetOptions
+    ): AsyncOperation<string, PresignFailure>
+    /**
+     * A form a browser posts a file to, straight to the bucket, kept under
+     * `key`: the bucket refuses any other key, content type or a file
+     * larger than `max_bytes`. Fails `not-presignable` as `presignGet` does,
+     * where the caller takes the file itself (`put`).
+     */
+    presignPost(
+        key: string,
+        options: PresignPostOptions
+    ): AsyncOperation<PresignedPost, PresignFailure>
 }
+
+/**
+ * Some of a file's bytes, from `start` to `end` inclusive, as an HTTP Range
+ * header asks for them. Without an `end`, to the end of the file.
+ */
+export type ByteRange = { start: number; end?: number }
+
+/**
+ * A file being read: its bytes from `start` to `end` inclusive, of `size`
+ * in all, and whether that's only part of it (a range, honored).
+ */
+export type Opened = {
+    body: ReadableStream<Uint8Array>
+    size: number
+    start: number
+    end: number
+    partial: boolean
+}
+
+/** Nothing is kept under the key, or the range starts past its end. */
+export type OpenFailure = "not-found" | "unsatisfiable"
+
+/** Which page of a listing, and what's in it (`ObjectStore.list`). */
+export type ListOptions = {
+    folders?: boolean
+    /** The last page's `cursor`, for the page after it. */
+    cursor?: string
+    limit?: number
+}
+
+/**
+ * A page of a listing: its files, its folders (each a prefix ending in
+ * `/`, when asked for), and the cursor for the next page, or null on the
+ * last.
+ */
+export type Listing = {
+    files: ListedFile[]
+    folders: string[]
+    cursor: string | null
+}
+
+/** A file in a listing: its key, its size in bytes, and when it was kept. */
+export type ListedFile = { key: string; size: number; modified: Date }
+
+/** What's kept under a key, without its bytes (`ObjectStore.head`). */
+export type FileDetails = {
+    size: number
+    content_type: string
+    modified: Date
+}
+
+/**
+ * How long a link works, and, with `download`, the name a browser saves
+ * the file under, in place of showing it.
+ */
+export type PresignGetOptions = { seconds: number; download?: string }
+
+/**
+ * How long the form works, what the file is, which the bucket keeps with
+ * it, and the most bytes it takes.
+ */
+export type PresignPostOptions = {
+    seconds: number
+    content_type: string
+    max_bytes: number
+}
+
+/**
+ * Where a browser posts a file, and the fields it sends before it, in this
+ * order, with the file last, as `file`.
+ */
+export type PresignedPost = { url: string; fields: Record<string, string> }
+
+/** There's no bucket to sign for: a dev server keeps files in a folder. */
+export type PresignFailure = "not-presignable"
+
+/**
+ * The longest a presigned link or form may work: Railway's buckets allow 90
+ * days (docs.railway.com/storage-buckets/uploading-serving).
+ */
+export const LONGEST_PRESIGN_SECONDS = 90 * 24 * 60 * 60
 
 /**
  * Where a dev server keeps its files: `.storage/` in the checkout it runs
