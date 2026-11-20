@@ -5,6 +5,7 @@ import type { Database } from "@/database"
 import { isInternal } from "@/utilities/schemas/users"
 import type { ApiEnvironment } from "../context"
 import { failure } from "../failures"
+import { type Access, roleFor } from "./access"
 import {
     liveSession,
     renewSession,
@@ -15,7 +16,9 @@ import {
 // Who's signed in: the `session` cookie, and the middleware that reads it.
 // This is the one place that decides who's signed in, so a route that
 // needs the user takes `signedIn` (or `maybeSignedIn`, or `internalOnly`)
-// and reads `context.var.user`; nothing else reads the cookie.
+// and reads `context.var.user`; nothing else reads the cookie. Their role
+// is the one access.ts gives them, whatever the database says, so only the
+// people listed there are ever internal.
 
 const COOKIE = "session"
 
@@ -88,7 +91,11 @@ export const signedIn = createFactory<SignedIn>().createMiddleware(
         const session =
             token === undefined
                 ? undefined
-                : await liveSession(context.var.database, token)
+                : await currentSession(
+                      context.var.database,
+                      context.var.access,
+                      token
+                  )
         if (token === undefined || session === undefined) {
             return failure(context, 401, "signed-out", "Sign in first")
         } else {
@@ -116,7 +123,11 @@ export const internalOnly = createFactory<SignedIn>().createMiddleware(
         const session =
             token === undefined
                 ? undefined
-                : await liveSession(context.var.database, token)
+                : await currentSession(
+                      context.var.database,
+                      context.var.access,
+                      token
+                  )
         if (token === undefined || session === undefined) {
             return failure(context, 401, "signed-out", "Sign in first")
         } else if (!isInternal(session.user.role)) {
@@ -153,7 +164,11 @@ export const maybeSignedIn = createFactory<{
     const session =
         token === undefined
             ? undefined
-            : await liveSession(context.var.database, token)
+            : await currentSession(
+                  context.var.database,
+                  context.var.access,
+                  token
+              )
     if (token === undefined || session === undefined) {
         context.set("user", null)
         await next()
@@ -168,6 +183,25 @@ export const maybeSignedIn = createFactory<{
         )
     }
 })
+
+// The live session behind this token, with its user's role as access.ts
+// gives it
+async function currentSession(
+    database: Database,
+    access: Access,
+    token: string
+) {
+    const session = await liveSession(database, token)
+    if (session === undefined) {
+        return undefined
+    } else {
+        const { user } = session
+        return {
+            ...session,
+            user: { ...user, role: roleFor(access, user.email, user.role) }
+        }
+    }
+}
 
 // Runs the route, renewing the session first when it's due, and sets the
 // renewed cookie after the route, since a header set before it is lost on

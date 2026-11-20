@@ -14,7 +14,9 @@ export async function findUser(database: Database, id: string) {
 
 /**
  * The addresses of the business's own people, whom a notice about the
- * business goes to, but `except`'s, like the person the notice is about.
+ * business goes to, but `except`'s, like the person the notice is about:
+ * the users access.ts lists, as the server's start and each sign-in keep
+ * the database (sync.ts).
  */
 export async function internalEmails(database: Database, except: string) {
     const rows = await database

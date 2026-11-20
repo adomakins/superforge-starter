@@ -2,7 +2,7 @@ import { mutationOptions, queryOptions } from "@tanstack/react-query"
 import type { InferResponseType } from "hono/client"
 import type { z } from "zod"
 import { client } from "@/backend/client"
-import type { Role, user_addition } from "@/utilities/schemas/users"
+import type { ExternalRole, user_addition } from "@/utilities/schemas/users"
 import { FailedRequest, readFailure } from "./failures"
 
 // Everyone who can sign in (backend/users/routes.ts), for the dashboard's
@@ -48,7 +48,7 @@ export const addUser = mutationOptions({
 /** Giving someone another role. */
 export const changeRole = mutationOptions({
     mutationKey: ["users", "change-role"],
-    mutationFn: async (input: { id: string; role: Role }) => {
+    mutationFn: async (input: { id: string; role: ExternalRole }) => {
         const response = await client.api.users[":id"].$patch({
             param: { id: input.id },
             json: { role: input.role }

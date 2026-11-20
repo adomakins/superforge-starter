@@ -30,8 +30,8 @@ test("a sign-up's run is listed, named for whom it's about, to internal people o
     expect(listed.status).toBe(200)
     if (listed.status === 200) {
         const { runs } = await listed.json()
-        expect(runs.map((run) => run.title).sort()).toEqual([
-            "Tell the team about ada@example.com",
+        // The customer's sign-up, and none for one of the business's own
+        expect(runs.map((run) => run.title)).toEqual([
             "Tell the team about maria@example.com"
         ])
     }

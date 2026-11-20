@@ -12,7 +12,7 @@ import {
 } from "@/frontend/queries/account"
 import { type SessionUser, signOut } from "@/frontend/queries/auth"
 import { failureOf } from "@/frontend/queries/failures"
-import { person_name } from "@/utilities/schemas/users"
+import { isInternal, person_name } from "@/utilities/schemas/users"
 import { useNow } from "./marks"
 import { sectionHeading, textButton } from "./shell"
 import { describeBrowser, isHandheld, moment, since } from "./words"
@@ -32,6 +32,49 @@ export function AccountPanel({ user }: { user: SessionUser }) {
 }
 
 function DetailsForm({ user }: { user: SessionUser }) {
+    if (isInternal(user.role)) {
+        return <ListedDetails user={user} />
+    } else {
+        return <NameForm user={user} />
+    }
+}
+
+/**
+ * One of the business's own: their name and address are the ones they're
+ * listed with in the app's code (backend/auth/access.ts), so they change
+ * there, not here.
+ */
+function ListedDetails({ user }: { user: SessionUser }) {
+    return (
+        <div className="flex flex-col gap-5">
+            <h2 className={sectionHeading}>Your details</h2>
+            <div className="flex flex-col gap-1">
+                <span className="font-medium text-sm">Name</span>
+                <span className="text-sm">{user.name ?? "No name yet"}</span>
+            </div>
+            <SignInEmail email={user.email} />
+            <p className="max-w-prose text-pretty text-muted-foreground text-sm">
+                You're listed as one of the business's own in the app's code,
+                with this name and address, so they change there.
+            </p>
+        </div>
+    )
+}
+
+/** The address someone signs in with, which never changes here. */
+function SignInEmail({ email }: { email: string }) {
+    return (
+        <div className="flex flex-col gap-1">
+            <span className="font-medium text-sm">Sign-in email</span>
+            <span className="text-sm">{email}</span>
+            <span className="text-muted-foreground text-sm">
+                Your sign-in codes and links go here.
+            </span>
+        </div>
+    )
+}
+
+function NameForm({ user }: { user: SessionUser }) {
     const ids = useId()
     const rename = useMutation(renameAccount)
     const [name, setName] = useState(user.name ?? "")
@@ -99,13 +142,7 @@ function DetailsForm({ user }: { user: SessionUser }) {
                     {problem}
                 </p>
             </div>
-            <div className="flex flex-col gap-1">
-                <span className="font-medium text-sm">Sign-in email</span>
-                <span className="text-sm">{user.email}</span>
-                <span className="text-muted-foreground text-sm">
-                    Your sign-in codes and links go here.
-                </span>
-            </div>
+            <SignInEmail email={user.email} />
         </form>
     )
 }

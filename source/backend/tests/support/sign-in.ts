@@ -1,12 +1,14 @@
 import { eq } from "drizzle-orm"
 import { users } from "@/database/schema"
-import type { Role } from "@/utilities/schemas/users"
+import { isInternal, type Role } from "@/utilities/schemas/users"
 import type { testApi } from "./api"
 
 /**
  * Signs `email` in through the whole API, as a person does, with Infra's
- * stand-in, which answers the code, then gives them `role`: what a route's
- * test calls to act as someone. Answers their user's id and the `cookie`
+ * stand-in, which answers the code, as `role`: what a route's test calls
+ * to act as someone. An internal role lists them first, as access.ts
+ * would, named for their address (`ada@example.com` is Ada Example); any
+ * other is set on their row. Answers their user's id and the `cookie`
  * header their browser would send.
  */
 export async function signInAs(
@@ -14,6 +16,15 @@ export async function signInAs(
     email: string,
     role: Role = "external"
 ) {
+    if (isInternal(role)) {
+        const [local = email, domain = ""] = email.split("@")
+        api.internal_users.push({
+            first_name: capitalized(local),
+            last_name: capitalized(domain.split(".")[0] ?? ""),
+            email,
+            role
+        })
+    }
     const started = await api.client.api.auth.start.$post({ json: { email } })
     if (started.status !== 200) {
         throw new Error("The test's sign-in didn't start")
@@ -30,8 +41,18 @@ export async function signInAs(
         throw new Error("The test's sign-in didn't verify")
     }
     const { user } = await verified.json()
-    await api.database.update(users).set({ role }).where(eq(users.id, user.id))
+    if (!isInternal(role)) {
+        await api.database
+            .update(users)
+            .set({ role })
+            .where(eq(users.id, user.id))
+    }
     return { id: user.id, cookie: sessionCookie(verified) }
+}
+
+// A word with its first letter capitalized
+function capitalized(word: string) {
+    return word.charAt(0).toUpperCase() + word.slice(1)
 }
 
 /** The `session` cookie a response set, as a request sends it back. */
