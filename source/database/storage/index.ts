@@ -23,9 +23,36 @@ export type ObjectStore = {
     ): Promise<void>
     /** The bytes kept under `key`, or null when nothing is. */
     get(key: string): Promise<Uint8Array<ArrayBuffer> | null>
+    /**
+     * What's kept under `key` as it streams, all of it or the bytes in
+     * `range`, without holding it in memory: for a large file sent on to a
+     * browser, like a video, which asks for it a range at a time.
+     */
+    open(key: string, range?: ByteRange): AsyncOperation<Opened, OpenFailure>
     /** Deletes what's kept under `key`, if anything is. */
     delete(key: string): Promise<void>
 }
+
+/**
+ * Some of a file's bytes, from `start` to `end` inclusive, as an HTTP Range
+ * header asks for them. Without an `end`, to the end of the file.
+ */
+export type ByteRange = { start: number; end?: number }
+
+/**
+ * A file being read: its bytes from `start` to `end` inclusive, of `size`
+ * in all, and whether that's only part of it (a range, honored).
+ */
+export type Opened = {
+    body: ReadableStream<Uint8Array>
+    size: number
+    start: number
+    end: number
+    partial: boolean
+}
+
+/** Nothing is kept under the key, or the range starts past its end. */
+export type OpenFailure = "not-found" | "unsatisfiable"
 
 /**
  * Where a dev server keeps its files: `.storage/` in the checkout it runs

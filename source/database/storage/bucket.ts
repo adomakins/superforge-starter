@@ -52,14 +52,25 @@ export function bucketStore(
     }
 
     // One request, signed afresh for each attempt, since a signature
-    // carries its time
-    async function send(key: string, init: RequestInit): Promise<Response> {
+    // carries its time. The timeout covers the whole exchange, or, for a
+    // file streamed on as it arrives (`open`), only the wait for its headers,
+    // so a slow reader on the other end doesn't cut it off part way.
+    async function send(
+        key: string,
+        init: RequestInit,
+        timeout: "whole" | "headers" = "whole"
+    ): Promise<Response> {
         const { client, base } = connection()
         const url = objectUrl(base, key)
         for (let attempt = 1; ; attempt += 1) {
+            const abort = new AbortController()
+            const timer = setTimeout(
+                () => abort.abort(new Error("Storage took too long to answer")),
+                TIMEOUT_MILLISECONDS
+            )
             const request = await client.sign(url, {
                 ...init,
-                signal: AbortSignal.timeout(TIMEOUT_MILLISECONDS)
+                signal: abort.signal
             })
             // What came back, or what `fetch` threw, told apart by which it
             // did rather than by class: the Node server swaps the global
@@ -74,6 +85,12 @@ export function bucketStore(
                         return { error }
                     }
                 })()
+            if (timeout === "headers" || !("response" in sent)) {
+                clearTimeout(timer)
+            } else {
+                // Until the body has been read, which the caller does
+                timer.unref()
+            }
             const passing =
                 !("response" in sent) ||
                 sent.response.status === 429 ||
@@ -134,6 +151,60 @@ export function bucketStore(
             }
         },
 
+        async open(key, range) {
+            const headers: Record<string, string> = {}
+            if (range !== undefined) {
+                headers.range = `bytes=${range.start}-${range.end ?? ""}`
+            }
+            const response = await send(
+                key,
+                { method: "GET", headers },
+                "headers"
+            )
+            if (response.status === 404) {
+                await response.body?.cancel()
+                return { ok: false, error: "not-found" }
+            } else if (response.status === 416) {
+                await response.body?.cancel()
+                return { ok: false, error: "unsatisfiable" }
+            } else if (!response.ok || response.body === null) {
+                const answer = await response.text()
+                console.error("Storage wouldn't stream a file", {
+                    key,
+                    status: response.status,
+                    answer
+                })
+                throw new Error(
+                    `Storage refused to stream ${key} with ${response.status}: ${answer}`
+                )
+            } else if (response.status === 206) {
+                const span = contentRange(response.headers.get("content-range"))
+                if (span === null) {
+                    await response.body.cancel()
+                    throw new Error(
+                        `Storage answered ${key}'s range without saying which`
+                    )
+                } else {
+                    return {
+                        ok: true,
+                        data: { body: response.body, ...span, partial: true }
+                    }
+                }
+            } else {
+                const size = Number(response.headers.get("content-length"))
+                return {
+                    ok: true,
+                    data: {
+                        body: response.body,
+                        size,
+                        start: 0,
+                        end: size - 1,
+                        partial: false
+                    }
+                }
+            }
+        },
+
         async delete(key) {
             // S3 answers 204 whether or not there was a file
             const response = await send(key, { method: "DELETE" })
@@ -158,4 +229,18 @@ function objectUrl(base: URL, key: string) {
     const url = new URL(base)
     url.pathname = `/${key.split("/").map(encodeURIComponent).join("/")}`
     return url.href
+}
+
+// Which bytes a 206 holds, of how many: `bytes 0-1023/146515`
+function contentRange(header: string | null) {
+    const found = header?.match(/^bytes (\d+)-(\d+)\/(\d+)$/)
+    if (found === undefined || found === null) {
+        return null
+    } else {
+        return {
+            start: Number(found[1]),
+            end: Number(found[2]),
+            size: Number(found[3])
+        }
+    }
 }

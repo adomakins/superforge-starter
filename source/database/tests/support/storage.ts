@@ -30,6 +30,35 @@ export function memoryStore() {
         async get(key) {
             return files.get(key)?.body ?? null
         },
+        async open(key, range) {
+            const file = files.get(key)
+            if (file === undefined) {
+                return { ok: false, error: "not-found" }
+            }
+            const size = file.body.length
+            const start = range?.start ?? 0
+            const end = Math.min(range?.end ?? size - 1, size - 1)
+            if (start >= size && size > 0) {
+                return { ok: false, error: "unsatisfiable" }
+            } else {
+                const bytes = file.body.slice(start, end + 1)
+                return {
+                    ok: true,
+                    data: {
+                        body: new ReadableStream({
+                            start(controller) {
+                                controller.enqueue(bytes)
+                                controller.close()
+                            }
+                        }),
+                        size,
+                        start,
+                        end,
+                        partial: range !== undefined
+                    }
+                }
+            }
+        },
         async delete(key) {
             files.delete(key)
         }

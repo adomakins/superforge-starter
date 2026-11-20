@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { ObjectStore } from "."
+import type { ByteRange, ObjectStore } from "."
 
 // One kind of file the app keeps (files.ts): the folder its files go in, the
 // key one is filed under, checked with zod before any path is made from it,
@@ -68,6 +68,14 @@ export class Files<Key, Body> {
         } else {
             return this.kind.content.decode(bytes, path)
         }
+    }
+
+    /**
+     * `key`'s file as it streams, all of it or the bytes in `range`, for
+     * sending on as it is, like a video to a browser.
+     */
+    open(key: Key, range?: ByteRange) {
+        return this.store.open(this.path(key), range)
     }
 
     /** Deletes `key`'s file, if there is one. */
