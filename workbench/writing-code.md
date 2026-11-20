@@ -303,11 +303,22 @@ against `now` and `fromNow` from `time.ts`.
   }`), where a key's file goes (`<customer id>/<invoice id>.pdf`), and
   what's in it: `json(schema)`, checked with zod as it's kept and as it's
   read back, `text(content_type)` or `bytes(content_type)`
-  (`storage/kind.ts`). An operation then calls
+  (`storage/kind.ts`), and how it shows on a screen of the bucket's
+  folders (`shown`: its name, what it holds, and `locked`, with why, for
+  files the code writes and depends on). Every kind is listed in
+  `Storage.kinds`, which its test checks. An operation then calls
   `storage.invoices.put(key, body)`, with the `context.var.storage` its
   route or step handed it, `.get(key)` (null when
   there's no file) or `.delete(key)`, and never writes a path: a key that doesn't fit its kind, or a path with an
-  empty, `.` or `..` part, throws before anything is kept. The key's first
+  empty, `.` or `..` part, throws before anything is kept. A file a
+  browser fetches or sends goes straight between it and the bucket:
+  `.presignGet(key, { seconds, download })` is a link that reads it, and
+  `.presignPost(key, { seconds, max_bytes })` a form the browser posts it
+  to. A dev server's folder can't sign either (`not-presignable`), so
+  there the route serves it with `.open(key, range)`, a stream, or takes
+  it and calls `.put`. `.head(key)` describes a file, `.list()` pages
+  through the kind's folder, and `.at(path)` reads one by the path a
+  listing gave, never changing it. The key's first
   part is what the file hangs off, so all of one customer's files are one
   prefix, and a row in Postgres keeps the key's parts. A kind's JSON schema
   only grows the way a column does, with optional fields, or the files

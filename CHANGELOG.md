@@ -132,8 +132,61 @@ months.
   week after they finish (`frontend/components/dashboard/runs.tsx`). How
   to tell a copy already has it: `engine.ts` has `pruneOnSchedule`.
 
+Storage a screen can browse: the bucket lists what's in a folder,
+describes and streams a file, and signs links and forms a browser uses
+straight against the bucket, and each kind of file says how it shows. So
+a screen of the bucket's folders, like Skyline's Files, can show what's in
+each and hand files over without the server holding them.
+
+- **Listing, describing and streaming**, machinery: `ObjectStore`
+  (`source/database/storage/index.ts`) gains `open(key, range?)`, a file
+  as it streams, all of it or a range, without holding it in memory, as
+  Skyline has had it; `list(prefix, { folders, cursor, limit })`, a page
+  of up to 1,000 files with their sizes and times, and with `folders` the
+  folders right under the prefix in place of what's in them; and
+  `head(key)`, a file's size, content type and time. The bucket
+  (`bucket.ts`) lists with S3's ListObjectsV2, reading its XML with zod,
+  and describes with HEAD. A dev server's folder (`folder.ts`) walks
+  `.storage/` and pages it the same way (`listing.ts`), guessing a content
+  type from a file's name, and the tests' memory store
+  (`tests/support/storage.ts`) does it all too. How to tell a copy
+  already has it: `source/database/storage/listing.ts` exists.
+- **Presigned links and forms**, machinery: `presignGet(key, { seconds,
+  download? })`, a link that reads a file without credentials, saving it
+  as `download` when given (`response-content-disposition`), and
+  `presignPost(key, { seconds, content_type, max_bytes })`, a form a
+  browser posts a file to, straight to the bucket, which refuses any
+  other key, content type or a larger file, signed as AWS's own SDK signs
+  one (`createPresignedPost`). Either works up to 90 days, Railway's
+  longest, and `bucketStore` takes the clock they're signed by, for the
+  tests. A dev server's folder has nothing to sign for, so both answer
+  `not-presignable` there, and the route serves or takes the file itself.
+  The memory store answers links that say what they were for, or
+  `not-presignable` with `memoryStore({ presigns: false })`. A browser
+  posting to the bucket needs the bucket's CORS to allow the app, which is
+  set through the S3 API (`PutBucketCors`), not `.railway/railway.ts`, and
+  nothing here sets it yet. How to tell a copy already has it: `bucket.ts`
+  has `presignPost`.
+- **How a kind shows**, machinery: every kind (`kind.ts`'s `Kind`) has
+  `shown`: its `name`, a sentence `about` what it holds, and `access`,
+  `open`, or `locked` with `why`, for files the code writes and depends
+  on, which a screen lets people look at and download but never change.
+  `Storage.kinds` (`files.ts`) lists every kind, and
+  `storage/tests/kinds.test.ts` fails a getter left out of it. `Files`
+  gains `folder`, `shown`, `head`, `presignGet`, `presignPost` (of the
+  kind's content type unless it says otherwise), `list` (in its folder,
+  or `under` a folder a listing gave), `holds(path)`, and `at(path)`, a
+  file by the path a listing gave, which can be read and presigned, never
+  changed. How to tell a copy already has it: `kind.ts` has `Shown`.
+
 Flags:
 
+- **A change in how something works**: every kind needs a `shown`, and
+  a place in `Storage.kinds`, or `pnpm typecheck` and the kinds test
+  fail. Every object that is an `ObjectStore`, like a copy's own fake of
+  one, needs `open`, `list`, `head`, `presignGet` and `presignPost`, as
+  `tests/support/storage.ts`'s does. A copy that added an `open` of its
+  own takes the template's.
 - **A change in how something works**: workflow runs are no longer
   deleted a week after they finish, so DBOS's tables (in the `dbos`
   schema) grow by a row for every step from the update on. A copy that
