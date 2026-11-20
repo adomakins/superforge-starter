@@ -3,6 +3,7 @@ import type pg from "pg"
 import type { Database } from "@/database"
 import type { Storage } from "@/database/storage"
 import type { Workflow, WorkflowContext } from "./define"
+import type { Runner } from "./runners"
 
 // What this process holds of its workflows, once: whether DBOS is starting
 // or running here, the lock that lets it (engine.ts, "the gate"), and each
@@ -20,6 +21,9 @@ export type WorkflowDependencies = {
     // Every workflow there is, registered before DBOS launches
     // (index.ts's WORKFLOWS, or a test's own)
     workflows: Workflow[]
+    // What runs on a timer while the workflows run here (index.ts's
+    // RUNNERS); none when it's left out, as the tests do
+    runners?: Runner[]
     // DBOS's connections, fewer for the tests, which share one Postgres
     // with every checkout's (engine.ts's DBOS_POOL_SIZE otherwise)
     dbos_pool_size?: number
@@ -42,6 +46,8 @@ export type WorkflowsProcess = {
     // Pruning finished runs about once an hour, when a copy keeps them for
     // a while rather than for good (engine.ts)
     pruning: ReturnType<typeof setInterval> | null
+    // Stops the runners (runners.ts), while the workflows run here
+    stop_runners: (() => void) | null
     // For starting a workflow before DBOS has launched here
     client: Promise<DBOSClient> | null
     // Each workflow's body as evaluated last, by its name, which is what the
@@ -64,6 +70,7 @@ export function workflowsProcess(): WorkflowsProcess {
         starting: null,
         gate: null,
         pruning: null,
+        stop_runners: null,
         client: null,
         bodies: new Map(),
         registered: new Map()

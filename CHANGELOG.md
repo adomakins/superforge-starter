@@ -131,6 +131,32 @@ months.
   week after they finish (`frontend/components/dashboard/runs.tsx`). How
   to tell a copy already has it: `engine.ts` has `pruneOnSchedule`.
 
+Runners, beside the workflows: something short that's just due at a time,
+like a reminder, is a timestamp in Postgres rather than a workflow
+(`backend/workflows/README.md`, "When not to use one"), and a runner is
+what checks it, every few seconds, while the workflows run.
+
+- **Runners**, machinery: a `Runner`
+  (`source/backend/workflows/runners.ts`) is a `name`, how often its turn
+  comes (`every`, in milliseconds), and the turn itself, `run`, handed the
+  process's database, bucket and workflows (`RunnerContext`). `RUNNERS`,
+  beside `WORKFLOWS` in `backend/workflows/index.ts`, lists every one
+  there is, and starts empty: a feature's goes there the moment it's
+  defined. `engine.ts` starts them (`startRunners`) once DBOS has
+  launched, behind the gate, so one process at a time runs them, and
+  `stopWorkflows()` stops them before DBOS shuts down. A turn never
+  overlaps the one before it, and one that throws is logged ("A runner's
+  turn failed") and the runner goes on. `WorkflowDependencies`
+  (`process.ts`) gains `runners`, which the tests leave out, so none run
+  there, and the process holds `stop_runners`. The workflows README's
+  "Runners" says how one is written, and `workflows/tests/runners.test.ts`
+  tries them on fake timers. The template has no runner of its own yet. A
+  copy that checks for something due on a timer of its own, like a
+  `setInterval` in its server, can move it to `RUNNERS`, so only the
+  process running the workflows runs it. How to tell a copy already has
+  it: `source/backend/workflows/runners.ts` exists, and `index.ts`
+  exports `RUNNERS`.
+
 Storage a screen can browse: the bucket lists what's in a folder,
 describes and streams a file, and signs links and forms a browser uses
 straight against the bucket, and each kind of file says how it shows. So

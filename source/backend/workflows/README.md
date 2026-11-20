@@ -181,6 +181,17 @@ timestamp in Postgres that a runner checks, not a workflow: a workflow
 would only add rows to DBOS's tables for each one, and one a deploy cuts
 off is still due, so the next process runs it.
 
+### Runners
+
+**A runner** (`runners.ts`) is what checks: a name, how often, and a
+function its turn runs, handed the process's database, bucket and
+workflows. Listed in `index.ts`'s `RUNNERS`, each runs on its timer while
+this process runs the workflows, behind the gate, so one process at a time
+does, and stops before DBOS shuts down. A turn never overlaps the one
+before it, and one that throws is logged and the runner goes on. Its turn
+is short: it finds what's due and does it, or starts a run for each,
+named for what it's for so a turn that finds it again starts it once.
+
 ## Testing
 
 - **A route that starts one** is tested with `testApi()`
