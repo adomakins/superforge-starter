@@ -33,6 +33,24 @@ test("sets and clears your name, which the session then says", async () => {
     expect(await cleared.json()).toEqual({ name: null })
 })
 
+test("one of the business's own keeps the name they're listed with", async () => {
+    const api = await testApi()
+    const { cookie } = await signInAs(api, "ada@example.com", "internal")
+    const headers = { headers: { cookie } }
+
+    const renamed = await api.client.api.account.$patch(
+        { json: { name: "Someone else" } },
+        headers
+    )
+    expect(renamed.status).toBe(409)
+    expect(api_failure.parse(await renamed.json()).error.reason).toBe("listed")
+    const session = await api.client.api.auth.session.$get({}, headers)
+    expect((await session.json()).user).toMatchObject({
+        name: "Ada Example",
+        role: "internal"
+    })
+})
+
 test("lists where you're signed in, this browser marked, with its browser", async () => {
     const api = await testApi()
     const first = await signInAs(api, "maria@example.com")

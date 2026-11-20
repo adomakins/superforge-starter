@@ -1,6 +1,7 @@
 # Toolbar
 
-A small toolbar on every page, for whoever's signed in to the app: when
+A small toolbar on every page, for the business's own people, the ones
+listed as internal in `backend/auth/access.ts`: when
 they spot something that should change, they click it, say what, and
 get back to work. It goes to Superforge Infra as a comment, and Claude
 fixes what's filed later: when someone asks it to work through them, or
@@ -9,8 +10,10 @@ without stopping to fix things as they go.
 
 **Only on a computer with a mouse** (`(hover: hover) and (pointer:
 fine)`): picking an element by touch is fiddly, and on a phone the
-toolbar covers too much. Nobody else sees it: a visitor, a phone or a
-tablet, and the prerender, which draws every page for one, get nothing.
+toolbar covers too much. Nobody else sees it: a visitor, a customer who
+signs in, a phone or a tablet, and the prerender, which draws every page
+for a visitor, get nothing, and `/api/comments` refuses anyone who isn't
+internal (`internalOnly`).
 
 ## How it works
 

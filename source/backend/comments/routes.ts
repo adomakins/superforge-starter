@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { COMMENT_BODY_LIMIT, page_comment } from "@/utilities/schemas/comments"
-import { signedIn } from "../auth/signed-in"
+import { internalOnly } from "../auth/signed-in"
 import { visitorUserAgent } from "../auth/visitor"
 import type { ApiEnvironment } from "../context"
 import { failure, validated } from "../failures"
@@ -11,8 +11,9 @@ import { failure, validated } from "../failures"
  * every page (frontend/components/toolbar/) posts a comment on an element
  * here, never to Infra, and the server sends it on with the key and who
  * filed it, for Superforge Infra to keep (backend/infra/README.md,
- * "Comments"). Only someone signed in can file one, so a visitor can't
- * reach the owner's list.
+ * "Comments"). Only the business's own people, listed in code
+ * (auth/access.ts), can file one, so neither a visitor nor a customer who
+ * signs in can reach the owner's list.
  */
 export const commentRoutes = new Hono<ApiEnvironment>()
     // A comment, `{ body, path, title, element, viewport }`. Answers 201
@@ -26,7 +27,7 @@ export const commentRoutes = new Hono<ApiEnvironment>()
             onError: (context) =>
                 failure(context, 413, "too-large", "A comment is at most 32 KB")
         }),
-        signedIn,
+        internalOnly,
         validated("json", page_comment),
         async (context) => {
             const comment = context.req.valid("json")

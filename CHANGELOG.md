@@ -54,10 +54,9 @@ the AI that builds the app to work through later.
 
 - **The toolbar**, machinery: `source/frontend/components/toolbar/`,
   which the root route draws on every page (`routes/__root.tsx`) for
-  whoever's signed in, on a computer with a mouse: never for a visitor,
-  on a phone or a tablet, or in the prerender. Every signed-in person
-  sees it, the business's customers among them where `ACCESS.sign_in` is
-  `anyone`. Comment picks an element as a browser's inspector does,
+  the business's own people (below), on a computer with a mouse: never
+  for a visitor or a customer who signs in, on a phone or a tablet, or in
+  the prerender. Comment picks an element as a browser's inspector does,
   outlined in a new theme token, `--highlight` (`styles.css`), which a
   copy whose theme START-HERE.md set adds as it is; a click on the page
   picks rather than does what it would, and Escape steps back. The
@@ -70,7 +69,7 @@ the AI that builds the app to work through later.
   box. The folder's README has the rest. How to tell a copy already has
   it: `source/frontend/components/toolbar/` exists.
 - **Comments, through the app's server**, machinery: `POST /api/comments`
-  (`source/backend/comments/routes.ts`), behind `signedIn`, adds the
+  (`source/backend/comments/routes.ts`), behind `internalOnly`, adds the
   user's ID and their `User-Agent` and calls `fileComment`, new on the
   Infra wrapper (`source/backend/infra/`: `comments.ts`, `answers.ts`,
   `client.ts`, `stand-in.ts`, `choose.ts`), which sends Infra's
@@ -179,8 +178,35 @@ each and hand files over without the server holding them.
   file by the path a listing gave, which can be read and presigned, never
   changed. How to tell a copy already has it: `kind.ts` has `Shown`.
 
+Internal users, listed in code: the business's own people are named in
+`ACCESS`, and no screen, route or sign-in makes anyone else internal.
+
+- **Internal users listed in code**, machinery, with the list a starting
+  point: `internal_users` in `ACCESS` (`source/backend/auth/access.ts`),
+  each with a first name, a last name and the email they sign in with,
+  in place of `internal_emails`. They're the only people who are ever
+  internal: the sign-in middleware gives everyone the role the list
+  says, whatever the database does (`auth/signed-in.ts`), so someone
+  taken off it is external from their next request; each sign-in and
+  the server's start (`backend/users/sync.ts`, `syncAppInternalUsers`,
+  which `source/node.ts` calls beside `startWorkflows`) write the list
+  into `users`, with each one's name; and the People screen and
+  `/api/users` add, change and remove only external people, refusing the
+  listed as `listed`. An internal person's name on their account page is
+  the listed one, and signing in for the first time isn't a sign-up for
+  them (no notice, no `signed-up` event). The roles split into
+  `INTERNAL_ROLES` and `EXTERNAL_ROLES` (`utilities/schemas/users.ts`),
+  with `ROLES` both, so the column's check doesn't change. The toolbar
+  and `/api/comments` are for internal people only. The template lists
+  two placeholders, Ada Lovelace and Grace Hopper at example.com, which
+  the seed's internal users are made from. How to tell a copy already
+  has it: `internal_users` in `source/backend/auth/access.ts`.
+
 Flags:
 
+- **Owner**: the business's people go in `internal_users`, the owner
+  first, with their names, from `internal_emails`; anyone the database
+  has as internal who isn't listed is external from the update's deploy.
 - **A change in how something works**: every kind needs a `shown`, and
   a place in `Storage.kinds`, or `pnpm typecheck` and the kinds test
   fail. Every object that is an `ObjectStore`, like a copy's own fake of

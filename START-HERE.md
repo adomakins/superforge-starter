@@ -119,12 +119,16 @@ Then say who signs in, from step 1's answers, in `ACCESS` in
   `"listed"` when only the team signs in, so a stranger can't make an
   account; the team then adds anyone else on the dashboard's People
   screen.
-- **`internal_emails`**: the business's own people, the owner first, in
-  lowercase. They're `internal` from the first time they sign in, and
-  everyone else `external`. If the business has more kinds of people than
-  those two, like technicians and customers, add the roles to `ROLES` in
-  `source/utilities/schemas/users.ts` (`workbench/writing-code.md`,
-  "Roles and who can sign in").
+- **`internal_users`**: the business's own people, the owner first, each
+  with their first name, last name and the email they'll sign in with,
+  in place of the placeholders (Ada Lovelace and Grace Hopper, at
+  example.com). They're the only people who are ever internal, and the
+  dashboard's People screen can't add or change them: someone joins or
+  leaves the team with a change here. Everyone else is `external`. If
+  the business has more kinds of people than those two, like technicians
+  and customers, add the roles to `INTERNAL_ROLES` or `EXTERNAL_ROLES` in
+  `source/utilities/schemas/users.ts`, and give each internal person
+  theirs (`workbench/writing-code.md`, "Roles and who can sign in").
 
 Then say whom the site remembers, from step 1's answer, in
 `VISITOR_MODE` in `source/utilities/visitors.ts`:

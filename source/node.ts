@@ -14,10 +14,11 @@ import { Hono } from "hono"
 type ServerEntry = { fetch(request: Request): Promise<Response> }
 
 // A path, not a specifier, so tsc doesn't look for a build that typecheck
-// runs before. Beside Start's entry, the workflows' start and stop
-// (source/server.ts).
+// runs before. Beside Start's entry, the internal users' sync, and the
+// workflows' start and stop (source/server.ts).
 const built: {
     default: ServerEntry
+    syncAppInternalUsers(): Promise<void>
     startWorkflows(): Promise<void>
     stopWorkflows(): Promise<void>
 } = await import(new URL("../output/server/server.js", import.meta.url).href)
@@ -79,9 +80,12 @@ const server = serve(
     (address) => console.info("Server listening", { port: address.port })
 )
 
-// The workflows, once the server is answering: while a deploy goes out they
-// wait for the old deployment's gate, and the healthcheck has to answer
-// meanwhile for Railway to stop the old one (source/backend/workflows/)
+// The internal users, made to follow the list in code
+// (source/backend/auth/access.ts), and the workflows, once the server is
+// answering: while a deploy goes out the workflows wait for the old
+// deployment's gate, and the healthcheck has to answer meanwhile for
+// Railway to stop the old one (source/backend/workflows/)
+built.syncAppInternalUsers()
 built.startWorkflows()
 
 // Railway stops the old deployment with SIGTERM once a new one is healthy:

@@ -2,7 +2,13 @@ import { eq, sql } from "drizzle-orm"
 import type { Database } from "@/database"
 import { users } from "@/database/schema"
 import { now } from "@/database/time"
-import { type Access, listedAsInternal } from "./access"
+import {
+    type Access,
+    listedInternal,
+    listedRole,
+    nameOf,
+    roleFor
+} from "./access"
 import {
     SESSION_USER_COLUMNS,
     type SessionUser,
@@ -11,15 +17,18 @@ import {
 
 /**
  * Whether `email` may start signing in, before Infra is asked to email it:
- * anyone may when anyone can sign in, and otherwise only someone already
- * on the People screen, or listed as internal (access.ts).
+ * anyone may when anyone can sign in, and otherwise only someone listed as
+ * internal (access.ts), or already on the People screen.
  */
 export async function maySignIn(
     database: Database,
     access: Access,
     email: string
 ) {
-    if (access.sign_in === "anyone" || listedAsInternal(access, email)) {
+    if (
+        access.sign_in === "anyone" ||
+        listedInternal(access, email) !== undefined
+    ) {
         return true
     } else {
         const [found] = await database
@@ -32,12 +41,14 @@ export async function maySignIn(
 
 /**
  * Signs in the user with this email, once Infra has said it's theirs: makes
- * the user the first time the address signs in, when anyone may (`internal`
- * when access.ts lists the address, `external` otherwise), marks them
- * signed in now, and starts a session in place of this browser's
- * (`replacing`), all together. Answers the user, the new session's token,
- * for its cookie, and whether this sign-in made them. Refuses someone
- * nobody added when only listed people may sign in.
+ * the user the first time the address signs in, when anyone may, marks
+ * them signed in now, and starts a session in place of this browser's
+ * (`replacing`), all together. Their role and, for the business's own, their
+ * name are set as access.ts lists them every time, so the database follows
+ * the list: someone listed is internal with the name they're listed with,
+ * and someone taken off it is external again. Answers the user, the new
+ * session's token, for its cookie, and whether this sign-in made them.
+ * Refuses someone nobody listed or added when only they may sign in.
  */
 export async function signIn(
     database: Database,
@@ -57,32 +68,27 @@ export async function signIn(
     "not-listed"
 > {
     return await database.transaction(async (transaction) => {
-        const internal = listedAsInternal(access, email)
+        const listed = listedInternal(access, email)
         let signed_in: SessionUser
         let joined: boolean
-        if (access.sign_in === "listed" && !internal) {
-            const [user] = await transaction
-                .update(users)
-                .set({ signed_in_at: now })
+        if (listed === undefined) {
+            const [existing] = await transaction
+                .select({ role: users.role })
+                .from(users)
                 .where(eq(users.email, email))
-                .returning(SESSION_USER_COLUMNS)
-            if (user === undefined) {
+            if (existing === undefined && access.sign_in === "listed") {
                 return { ok: false, error: "not-listed" }
-            } else {
-                signed_in = user
-                joined = false
             }
-        } else {
+            const role =
+                existing === undefined
+                    ? "external"
+                    : roleFor(access, email, existing.role)
             const [user] = await transaction
                 .insert(users)
-                .values({
-                    email,
-                    role: internal ? "internal" : "external",
-                    signed_in_at: now
-                })
+                .values({ email, role, signed_in_at: now })
                 .onConflictDoUpdate({
                     target: users.email,
-                    set: { signed_in_at: now }
+                    set: { role, signed_in_at: now }
                 })
                 .returning({
                     ...SESSION_USER_COLUMNS,
@@ -93,11 +99,36 @@ export async function signIn(
             if (user === undefined) {
                 // An insert that updates on conflict always answers its row
                 throw new Error("A user's upsert answered no row")
-            } else {
-                const { joined: made, ...rest } = user
-                signed_in = rest
-                joined = made
             }
+            const { joined: made, ...rest } = user
+            signed_in = rest
+            joined = made
+        } else {
+            const values = {
+                email,
+                name: nameOf(listed),
+                role: listedRole(listed),
+                signed_in_at: now
+            }
+            const [user] = await transaction
+                .insert(users)
+                .values(values)
+                .onConflictDoUpdate({
+                    target: users.email,
+                    set: {
+                        name: values.name,
+                        role: values.role,
+                        signed_in_at: now
+                    }
+                })
+                .returning(SESSION_USER_COLUMNS)
+            if (user === undefined) {
+                throw new Error("A user's upsert answered no row")
+            }
+            signed_in = user
+            // One of the business's own is never a sign-up, even the first
+            // time: no notice goes out about them
+            joined = false
         }
 
         const token = await startSession(

@@ -1,16 +1,20 @@
 import start, { createServerEntry } from "@tanstack/react-start/server-entry"
 import { api } from "./backend"
+import { syncAppInternalUsers } from "./backend/users/sync"
 import { startWorkflows } from "./backend/workflows/engine"
 
-// The workflows' start and stop (backend/workflows/engine.ts), for the Node
-// server, which starts them once it's listening and stops them as Railway
-// stops the deployment (source/node.ts)
+// What the Node server runs once it's listening (source/node.ts): the
+// internal users made to follow the list in backend/auth/access.ts
+// (backend/users/sync.ts), and the workflows' start, with their stop as
+// Railway stops the deployment (backend/workflows/engine.ts)
+export { syncAppInternalUsers } from "./backend/users/sync"
 export { startWorkflows, stopWorkflows } from "./backend/workflows/engine"
 
-// A dev server starts the workflows as it first loads this, once for its
-// life, however many times it loads it again. The build's prerender loads
-// it too, and never starts them, and the tests never load it.
+// A dev server does both as it first loads this, once for its life,
+// however many times it loads it again. The build's prerender loads it
+// too, and never does, and the tests never load it.
 if (import.meta.env.DEV) {
+    syncAppInternalUsers()
     startWorkflows()
 }
 

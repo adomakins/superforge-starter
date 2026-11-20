@@ -14,8 +14,9 @@ import {
 } from "@/frontend/queries/users"
 import { runsQuery } from "@/frontend/queries/workflows"
 import {
+    EXTERNAL_ROLES,
+    type ExternalRole,
     isInternal,
-    ROLES,
     type Role,
     user_addition
 } from "@/utilities/schemas/users"
@@ -155,7 +156,9 @@ export function PeopleList({
 
 /**
  * One person: their role, when they joined and last signed in, the runs
- * about them, and removing them. You can't change or remove yourself.
+ * about them, and removing them. The business's own people are listed in
+ * the app's code (backend/auth/access.ts), so they're neither changed nor
+ * removed here, and neither are you, who are one of them.
  */
 export function PersonDetailPane({
     person,
@@ -189,13 +192,15 @@ export function PersonDetailPane({
             <dl className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm sm:grid-cols-[9rem_minmax(0,1fr)]">
                 <dt className="self-center text-muted-foreground">Role</dt>
                 <dd className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                    <RoleSwitch person={person} disabled={you} />
+                    {person.listed || EXTERNAL_ROLES.length === 1 ? (
+                        <RoleWord role={person.role} />
+                    ) : (
+                        <RoleSwitch person={person} />
+                    )}
                     <span className="text-muted-foreground text-xs">
-                        {you
-                            ? "Someone else changes yours."
-                            : isInternal(person.role)
-                              ? "Sees this dashboard."
-                              : "Sees only their own account."}
+                        {person.listed
+                            ? "Sees this dashboard. Listed in the app's code, so changed there."
+                            : "Sees only their own account."}
                     </span>
                 </dd>
                 <dt className="text-muted-foreground">Joined</dt>
@@ -245,31 +250,26 @@ export function PersonDetailPane({
                 )}
             </section>
 
-            {!you && <RemovePerson person={person} />}
+            {!(you || person.listed) && <RemovePerson person={person} />}
         </article>
     )
 }
 
 /**
- * Which role someone has, as choices side by side, one per role there is
- * (utilities/schemas/users.ts).
+ * Which role someone external has, as choices side by side, one per
+ * external role there is (utilities/schemas/users.ts), for a business with
+ * more than one.
  */
-function RoleSwitch({
-    person,
-    disabled
-}: {
-    person: Person
-    disabled: boolean
-}) {
+function RoleSwitch({ person }: { person: Person }) {
     const change = useMutation(changeRole)
     return (
         <span className="flex flex-col gap-1">
             <fieldset
-                disabled={disabled || change.isPending}
+                disabled={change.isPending}
                 className="inline-flex w-fit rounded-lg border bg-muted p-0.5 disabled:opacity-60"
             >
                 <legend className="sr-only">Role</legend>
-                {ROLES.map((role) => (
+                {EXTERNAL_ROLES.map((role) => (
                     <button
                         key={role}
                         type="button"
@@ -364,14 +364,16 @@ function RemovePerson({ person }: { person: Person }) {
 
 /**
  * Adding someone before they sign in: their address, a name if it's known,
- * and their role. They can sign in with that address from then on, even
- * when only listed people may.
+ * and, for a business with more than one external role, which. They can
+ * sign in with that address from then on, even when only listed people
+ * may. The business's own people aren't added here: they're listed in the
+ * app's code (backend/auth/access.ts).
  */
 export function AddPersonPane() {
     const ids = useId()
     const add = useMutation(addUser)
     const navigate = useNavigate()
-    const [role, setRole] = useState<Role>("internal")
+    const [role, setRole] = useState<ExternalRole>(EXTERNAL_ROLES[0])
     const [invalid, setInvalid] = useState<string[]>([])
 
     function submit(event: SubmitEvent<HTMLFormElement>) {
@@ -408,7 +410,9 @@ export function AddPersonPane() {
             ? null
             : failureOf(add.error).reason === "taken"
               ? "Someone with this address is already here."
-              : `They weren't added: ${failureOf(add.error).message}.`
+              : failureOf(add.error).reason === "listed"
+                ? "They're listed as one of the business's own in the app's code, so they can already sign in."
+                : `They weren't added: ${failureOf(add.error).message}.`
 
     return (
         <article className="mx-auto flex max-w-xl flex-col gap-6 px-5 py-6 sm:px-10 sm:py-8">
@@ -418,8 +422,9 @@ export function AddPersonPane() {
                     Add someone
                 </h2>
                 <p className="text-pretty text-muted-foreground">
-                    They sign in with their email, as anyone does. Adding them
-                    first gives them their role from the start.
+                    They sign in with their email, as anyone does, and see only
+                    their own account. The business's own people are listed in
+                    the app's code instead.
                 </p>
             </header>
             <form noValidate onSubmit={submit} className="flex flex-col gap-5">
@@ -451,27 +456,26 @@ export function AddPersonPane() {
                         className="h-10"
                     />
                 </div>
-                <fieldset className="flex flex-col gap-2">
-                    <legend className="pb-2 font-medium text-sm">Role</legend>
-                    <div className="inline-flex w-fit rounded-lg border bg-muted p-0.5">
-                        {ROLES.map((each) => (
-                            <button
-                                key={each}
-                                type="button"
-                                aria-pressed={role === each}
-                                onClick={() => setRole(each)}
-                                className="rounded-md px-2.5 py-1 font-medium text-muted-foreground text-xs transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-xs"
-                            >
-                                {ROLE_NAMES[each]}
-                            </button>
-                        ))}
-                    </div>
-                    <span className="text-muted-foreground text-xs">
-                        {isInternal(role)
-                            ? "They'll see this dashboard: the people and the workflows."
-                            : "They'll see only their own account."}
-                    </span>
-                </fieldset>
+                {EXTERNAL_ROLES.length > 1 && (
+                    <fieldset className="flex flex-col gap-2">
+                        <legend className="pb-2 font-medium text-sm">
+                            Role
+                        </legend>
+                        <div className="inline-flex w-fit rounded-lg border bg-muted p-0.5">
+                            {EXTERNAL_ROLES.map((each) => (
+                                <button
+                                    key={each}
+                                    type="button"
+                                    aria-pressed={role === each}
+                                    onClick={() => setRole(each)}
+                                    className="rounded-md px-2.5 py-1 font-medium text-muted-foreground text-xs transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-xs"
+                                >
+                                    {ROLE_NAMES[each]}
+                                </button>
+                            ))}
+                        </div>
+                    </fieldset>
+                )}
                 {problem !== null && (
                     <p role="alert" className="text-destructive text-sm">
                         {problem}

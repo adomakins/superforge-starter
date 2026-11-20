@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { z } from "zod"
 import { account_change } from "@/utilities/schemas/users"
+import { listedInternal } from "../auth/access"
 import {
     endOtherSessions,
     endSessionById,
@@ -19,7 +20,8 @@ const session_path = z.object({ id: z.string().regex(/^[0-9a-f]{16}$/) })
  * The signed-in person's own account, under /api/account, whatever their
  * role: what they're called, and the browsers they're signed in on, with
  * signing out of the others. Their address is who they are, so it doesn't
- * change here.
+ * change here, and neither does the name of one of the business's own,
+ * which is the one they're listed with in code (auth/access.ts).
  */
 export const accountRoutes = new Hono<ApiEnvironment>()
     .patch(
@@ -27,6 +29,14 @@ export const accountRoutes = new Hono<ApiEnvironment>()
         signedIn,
         validated("json", account_change),
         async (context) => {
+            if (listedInternal(context.var.access, context.var.user.email)) {
+                return failure(
+                    context,
+                    409,
+                    "listed",
+                    "Your name is the one you're listed with in the app's code, so it changes there"
+                )
+            }
             const renamed = await renameUser(
                 context.var.database,
                 context.var.user.id,

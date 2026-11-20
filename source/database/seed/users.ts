@@ -1,31 +1,33 @@
 import { createHash } from "node:crypto"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
+import { ACCESS, listedRole, nameOf } from "@/backend/auth/access"
 import type { Database } from "@/database"
 import { sessions, users } from "@/database/schema"
 import { fromNow } from "@/database/time"
 import { DAY, HOUR } from "@/utilities/primitives/durations"
 import type { Seeder } from "./seed"
 
-// Sample users and their sessions: two of the business's own, one signed in
-// now and one whose session has run out, and customers who've signed up
-// over the last few days, one with no name and one added by hand who's
-// never signed in. Their addresses are example.com's, which reach nobody.
+// Sample users and their sessions: the business's own people, as
+// backend/auth/access.ts lists them, the first signed in now and the second
+// with a session that has run out, and customers who've signed up over the
+// last few days, one with no name and one added by hand who's never signed
+// in. The customers' addresses are example.com's, which reach nobody.
+
+// The business's own, made from the list, so the seed's internal people
+// are the ones the code says, and the server's start changes none of them
+const INTERNAL = ACCESS.internal_users.map((person, index) => ({
+    email: person.email.trim().toLowerCase(),
+    name: nameOf(person),
+    role: listedRole(person),
+    signed_in_at: fromNow(-(2 + 43 * index) * DAY),
+    created_at: fromNow(-(94 - 3 * index) * DAY)
+}))
+
+// The first two of them, whose sample sessions follow
+const [FIRST_INTERNAL, SECOND_INTERNAL] = INTERNAL
 
 const SAMPLE_USERS = [
-    {
-        email: "ada@example.com",
-        name: "Ada Lovelace",
-        role: "internal" as const,
-        signed_in_at: fromNow(-2 * DAY),
-        created_at: fromNow(-94 * DAY)
-    },
-    {
-        email: "grace@example.com",
-        name: "Grace Hopper",
-        role: "internal" as const,
-        signed_in_at: fromNow(-45 * DAY),
-        created_at: fromNow(-91 * DAY)
-    },
+    ...INTERNAL,
     {
         email: "maria.santos@example.com",
         name: "Maria Santos",
@@ -65,27 +67,35 @@ const SAFARI_ON_AN_IPHONE =
 // Each session by its user, with the token its cookie would hold: its
 // SHA-256 is what's kept, as a real session's is (backend/auth/tokens.ts)
 const SAMPLE_SESSIONS = [
-    {
-        email: "ada@example.com",
-        token: "sample-session-ada",
-        user_agent: CHROME_ON_A_MAC,
-        created_at: fromNow(-12 * DAY),
-        expires_at: fromNow(28 * DAY)
-    },
-    {
-        email: "ada@example.com",
-        token: "sample-session-ada-phone",
-        user_agent: SAFARI_ON_AN_IPHONE,
-        created_at: fromNow(-31 * DAY),
-        expires_at: fromNow(20 * DAY)
-    },
-    {
-        email: "grace@example.com",
-        token: "sample-session-grace",
-        user_agent: null,
-        created_at: fromNow(-60 * DAY),
-        expires_at: fromNow(-15 * DAY)
-    },
+    ...(FIRST_INTERNAL === undefined
+        ? []
+        : [
+              {
+                  email: FIRST_INTERNAL.email,
+                  token: "sample-session-internal",
+                  user_agent: CHROME_ON_A_MAC,
+                  created_at: fromNow(-12 * DAY),
+                  expires_at: fromNow(28 * DAY)
+              },
+              {
+                  email: FIRST_INTERNAL.email,
+                  token: "sample-session-internal-phone",
+                  user_agent: SAFARI_ON_AN_IPHONE,
+                  created_at: fromNow(-31 * DAY),
+                  expires_at: fromNow(20 * DAY)
+              }
+          ]),
+    ...(SECOND_INTERNAL === undefined
+        ? []
+        : [
+              {
+                  email: SECOND_INTERNAL.email,
+                  token: "sample-session-internal-expired",
+                  user_agent: null,
+                  created_at: fromNow(-60 * DAY),
+                  expires_at: fromNow(-15 * DAY)
+              }
+          ]),
     {
         email: "maria.santos@example.com",
         token: "sample-session-maria",

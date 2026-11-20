@@ -331,10 +331,12 @@ test("signedIn lets a live session through with its user, and answers 401 withou
     const api = await testApi()
     const { cookie } = await signedInUser(api)
 
-    // A route of the test's own behind it, on the same database
+    // A route of the test's own behind it, on the same database, with who
+    // is internal, which the middleware reads each user's role through
     const app = new Hono<ApiEnvironment>()
         .use(async (context, next) => {
             context.set("database", api.database)
+            context.set("access", { sign_in: "anyone", internal_users: [] })
             await next()
         })
         .get("/private", signedIn, (context) =>
@@ -369,10 +371,19 @@ test("someone new is external, and their sign-up starts the notice to the team, 
     ])
 })
 
-test("an address listed as internal is internal from its first sign-in, and the session says so", async () => {
+test("someone listed as internal is internal from their first sign-in, with their listed name, and no sign-up", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {})
     const api = await testApi({
-        access: { sign_in: "anyone", internal_emails: ["Ada@Example.com"] }
+        access: {
+            sign_in: "anyone",
+            internal_users: [
+                {
+                    first_name: "Ada",
+                    last_name: "Lovelace",
+                    email: "Ada@Example.com"
+                }
+            ]
+        }
     })
     const { code } = await emailed(api.client)
     const verified = await api.client.api.auth.verify.$post(
@@ -383,12 +394,56 @@ test("an address listed as internal is internal from its first sign-in, and the 
     if (verified.status === 200) {
         expect((await verified.json()).user).toMatchObject({
             email: EMAIL,
-            name: null,
+            name: "Ada Lovelace",
             role: "internal"
         })
     }
     const [session] = await api.database.select().from(sessions)
     expect(session?.user_agent).toBe("Test browser")
+    // One of the business's own isn't a sign-up: no notice about them
+    expect(api.started).toEqual([])
+})
+
+test("only the list makes anyone internal: taken off it, or made internal by hand, someone is external from their next request", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    const api = await testApi()
+    api.internal_users.push({
+        first_name: "Ada",
+        last_name: "Lovelace",
+        email: EMAIL
+    })
+    const { code } = await emailed(api.client)
+    const verified = await api.client.api.auth.verify.$post({
+        json: { email: EMAIL, code }
+    })
+    const cookie = sessionCookie(verified) ?? ""
+    const headers = { headers: { cookie } }
+    expect((await api.client.api.users.$get({}, headers)).status).toBe(200)
+
+    // Taken off the list: the same session is external at once
+    api.internal_users.splice(0)
+    const refused = await api.client.api.users.$get({}, headers)
+    expect(refused.status).toBe(403)
+    const session = await api.client.api.auth.session.$get({}, headers)
+    expect((await session.json()).user).toMatchObject({ role: "external" })
+
+    // Made internal in the database by hand: still external
+    await api.database
+        .update(users)
+        .set({ role: "internal" })
+        .where(eq(users.email, EMAIL))
+    expect((await api.client.api.users.$get({}, headers)).status).toBe(403)
+
+    // And signing in again writes the role the list gives
+    const again = await emailed(api.client)
+    await api.client.api.auth.verify.$post({
+        json: { email: EMAIL, code: again.code }
+    })
+    const [user] = await api.database
+        .select({ role: users.role })
+        .from(users)
+        .where(eq(users.email, EMAIL))
+    expect(user?.role).toBe("external")
 })
 
 test("when only listed people may sign in, anyone else is refused before Infra is asked", async () => {
@@ -396,7 +451,12 @@ test("when only listed people may sign in, anyone else is refused before Infra i
     const asked: string[] = []
     const stand_in = standInInfra()
     const api = await testApi({
-        access: { sign_in: "listed", internal_emails: [EMAIL] },
+        access: {
+            sign_in: "listed",
+            internal_users: [
+                { first_name: "Ada", last_name: "Lovelace", email: EMAIL }
+            ]
+        },
         infra: {
             startSignIn: async (request) => {
                 asked.push(request.email)
@@ -437,5 +497,5 @@ test("when only listed people may sign in, anyone else is refused before Infra i
     expect(verified.status).toBe(200)
     expect(asked).toEqual([EMAIL, "grace@example.com"])
     // Neither joined by signing in, so no notice went out
-    expect(api.started).toHaveLength(1)
+    expect(api.started).toHaveLength(0)
 })

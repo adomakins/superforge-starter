@@ -1,6 +1,6 @@
 import { testClient } from "hono/testing"
 import { apiWith } from "@/backend"
-import type { Access } from "@/backend/auth/access"
+import type { Access, InternalUser } from "@/backend/auth/access"
 import type { ApiEnvironment } from "@/backend/context"
 import { standInInfra } from "@/backend/infra/stand-in"
 import { recordedWorkflows } from "@/backend/workflows/tests/support/recorded"
@@ -10,8 +10,9 @@ import { memoryStore } from "@/database/tests/support/storage"
 import type { VisitorMode } from "@/utilities/visitors"
 
 // Who can sign in, in a test unless it says otherwise: anyone, with no one
-// internal from their first sign-in, whatever this app's ACCESS says
-const OPEN: Access = { sign_in: "anyone", internal_emails: [] }
+// listed as internal, whatever this app's ACCESS says, until the test signs
+// someone in as internal (sign-in.ts)
+const OPEN: Access = { sign_in: "anyone", internal_users: [] }
 
 // Whom the site remembers, in a test unless it says otherwise: the mode
 // the template ships with, whatever this app's VISITOR_MODE says
@@ -33,12 +34,16 @@ export async function testApi(
 ) {
     const store = memoryStore()
     const recorded = recordedWorkflows()
+    // The test's own list of internal users, which `signInAs` adds to, so
+    // signing someone in as internal lists them, as the code would
+    const given = replacing.access ?? OPEN
+    const internal_users: InternalUser[] = [...given.internal_users]
     const variables: ApiEnvironment["Variables"] = {
         database: replacing.database ?? (await testDatabase()),
         storage: replacing.storage ?? new Storage(store.store),
         workflows: replacing.workflows ?? recorded.workflows,
         infra: replacing.infra ?? standInInfra(),
-        access: replacing.access ?? OPEN,
+        access: { sign_in: given.sign_in, internal_users },
         visitor_mode: replacing.visitor_mode ?? REMEMBER
     }
     const api = apiWith(() => variables)
@@ -49,6 +54,7 @@ export async function testApi(
         // What the routes kept in the bucket, the workflows they started and
         // retried, and the runs the workflows list, which a test can add to
         files: store.files,
+        internal_users,
         started: recorded.started,
         retried: recorded.retried,
         runs: recorded.runs

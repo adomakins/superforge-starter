@@ -194,29 +194,43 @@ matters:
 `ROLES` in `source/utilities/schemas/users.ts`, `internal` for the
 business's own people and `external` for everyone it serves.
 `INTERNAL_ROLES` says which roles see the business's side of the dashboard
-(the people, the workflows) and pass `internalOnly`; every other role sees
-only its own account.
+(the people, the workflows) and pass `internalOnly`; `EXTERNAL_ROLES` are
+everyone else's, who see only their own account.
 
-- **A new role**, like `technician` or `lead`, goes in `ROLES`, and in
-  `INTERNAL_ROLES` when it's one of the business's own. The column is text
-  with a check made from `ROLES` (`schema.ts`), not a Postgres enum, so
-  `pnpm database:generate` writes the migration that changes the check,
-  and a deploy can use the new role in the same transaction. Its name on
-  screen goes in `ROLE_NAMES` (`components/dashboard/people.tsx`).
+- **The business's own people are listed in code**, never added on a
+  screen: `internal_users` in `ACCESS`, `source/backend/auth/access.ts`,
+  each with a first name, a last name and the address they sign in with
+  (and, for a business with more than one internal role, which). They're
+  the only people who are ever internal. The sign-in middleware gives
+  everyone the role the list says, whatever the database does
+  (`signed-in.ts`), so someone taken off the list is external from their
+  next request, and a row made internal by hand changes nothing. Each
+  sign-in, and the server's start (`backend/users/sync.ts`), write the
+  list into `users`, so the People screen and the notices to the team
+  agree with it: a listed person is a user from the deploy that lists
+  them, with the name they're listed with, which their account page then
+  shows and doesn't change. The People screen adds, changes and removes
+  only external people, and the API refuses the listed as `listed`.
+- **A new role**, like `technician` or `lead`, goes in `INTERNAL_ROLES`
+  or `EXTERNAL_ROLES`. The column is text with a check made from both
+  (`schema.ts`), not a Postgres enum, so `pnpm database:generate` writes
+  the migration that changes the check, and a deploy can use the new role
+  in the same transaction. Its name on screen goes in `ROLE_NAMES`
+  (`components/dashboard/people.tsx`). An internal one is given in the
+  list (`role: "technician"`); an external one, on the People screen.
 - **Permissions that don't nest**, like a technician who sees the
   schedule but not the invoices, are a middleware beside `internalOnly`
   that checks the role a route needs: still one role per person.
-- **Who can sign in** is `ACCESS` in `source/backend/auth/access.ts`,
-  which START-HERE.md sets: `sign_in: "anyone"` makes someone new at their
-  first sign-in, as `external`, and `"listed"` lets in only someone already
-  on the People screen (added by an internal person) or in
-  `internal_emails`. `internal_emails` are internal from their first
-  sign-in, like the owner's; after that, roles change on the People screen.
+- **Who can sign in** is `sign_in` in the same `ACCESS`, which
+  START-HERE.md sets: `"anyone"` makes someone new at their first
+  sign-in, as `external`, and `"listed"` lets in only the internal users
+  and someone already on the People screen (added by an internal person).
   It's code, not a Railway variable, so a dev server signs in the way
   production does. Routes read it from `context.var.access`, and a test
-  hands its own (`testApi({ access })`).
-- **No one changes or removes themselves**, so the business always has
-  someone who can change them back (`backend/users/`).
+  hands its own (`testApi({ access })`), or signs someone in as internal
+  with `signInAs(api, email, "internal")`, which lists them first.
+- **No one changes or removes the business's own people but the code**,
+  so it always has someone who can sign in to the dashboard.
 
 ### How a route fails
 

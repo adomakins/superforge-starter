@@ -2,14 +2,16 @@ import { and, desc, eq, gt, sql } from "drizzle-orm"
 import type { Database } from "@/database"
 import { sessions, users } from "@/database/schema"
 import { now } from "@/database/time"
+import { type Access, listedInternal, roleFor } from "../auth/access"
 
 /**
  * Everyone who can sign in, newest first, for the dashboard's People
- * screen: who they are, their role, when they joined and last signed in,
- * and how many browsers they're signed in on now.
+ * screen: who they are, their role, as access.ts gives it, whether they're
+ * listed there as one of the business's own, when they joined and last
+ * signed in, and how many browsers they're signed in on now.
  */
-export async function listUsers(database: Database) {
-    return await database
+export async function listUsers(database: Database, access: Access) {
+    const rows = await database
         .select({
             id: users.id,
             email: users.email,
@@ -27,6 +29,11 @@ export async function listUsers(database: Database) {
         )
         .groupBy(users.id)
         .orderBy(desc(users.created_at))
+    return rows.map((row) => ({
+        ...row,
+        role: roleFor(access, row.email, row.role),
+        listed: listedInternal(access, row.email) !== undefined
+    }))
 }
 
 /** Someone on the People screen, as `listUsers` answers them. */

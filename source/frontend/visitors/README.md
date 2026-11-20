@@ -82,7 +82,7 @@ lost there, and logged, since events sent twice are kept twice.
   (`routes/dashboard/route.tsx`). Its clicks still count, by `target` and
   `href`.
 - **A click inside `data-untracked`**, which isn't the visitor's own,
-  like the toolbar whoever's signed in sees (`components/toolbar/`).
+  like the toolbar the business's own people see (`components/toolbar/`).
 - **Who's signed in, from the page.** The server adds their user ID to
   every batch from its own session (`backend/visits/routes.ts`), and
   Infra keeps it only of a visitor it remembers.
