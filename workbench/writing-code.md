@@ -31,7 +31,7 @@ not a preference. There are three ways into the data, and if each read and
 wrote it its own way, their checks would drift apart:
 
 ```text
- Website (pages)          Claude, through /mcp       Workflows (DBOS)
+ Website (pages)          Claude, at /admin/mcp      Workflows (DBOS)
        │ the typed client       │ HTTP, with a token         │
        └───────────────► routes under /api                   │
                                ▼                             ▼

@@ -244,13 +244,15 @@ describe("where Claude signs in", () => {
             "http://localhost:3000/.well-known/oauth-protected-resource"
         )
         expect(await local.json()).toMatchObject({
-            resource: "http://localhost:3000/mcp",
+            resource: "http://localhost:3000/admin/mcp",
             authorization_servers: ["http://localhost:3000"]
         })
         const live = await oauth.request(
-            "http://vmdsystem.com/.well-known/oauth-protected-resource/mcp"
+            "http://vmdsystem.com/.well-known/oauth-protected-resource/admin/mcp"
         )
-        expect((await live.json()).resource).toBe("https://vmdsystem.com/mcp")
+        expect((await live.json()).resource).toBe(
+            "https://vmdsystem.com/admin/mcp"
+        )
     })
 
     test("Claude's OAuth calls go to Infra as they are, with the app's key and origin", async () => {
@@ -292,7 +294,7 @@ describe("the MCP", () => {
     test("without a token, it says where to sign in", async () => {
         const setup = await testApi()
         const mcp = mcpWith(setup.api)
-        const response = await mcp.request("http://localhost/mcp", {
+        const response = await mcp.request("http://localhost/admin/mcp", {
             method: "POST",
             headers: {
                 "content-type": "application/json",
@@ -302,8 +304,19 @@ describe("the MCP", () => {
         })
         expect(response.status).toBe(401)
         expect(response.headers.get("www-authenticate")).toBe(
-            'Bearer resource_metadata="http://localhost/.well-known/oauth-protected-resource/mcp"'
+            'Bearer resource_metadata="http://localhost/.well-known/oauth-protected-resource/admin/mcp"'
         )
+    })
+
+    test("answers under /admin, leaving /mcp for a customer MCP", async () => {
+        const setup = await testApi()
+        const mcp = mcpWith(setup.api)
+        const left = await mcp.request("http://localhost/mcp", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" })
+        })
+        expect(left.status).toBe(404)
     })
 
     test("lists the API's routes, and calls one as the person", async () => {
@@ -313,10 +326,15 @@ describe("the MCP", () => {
         const mcp = mcpWith(setup.api)
         const client = new Client({ name: "test", version: "1.0.0" })
         await client.connect(
-            new StreamableHTTPClientTransport(new URL("http://localhost/mcp"), {
-                fetch: async (url, init) => await mcp.request(url, init),
-                requestInit: { headers: { Authorization: `Bearer ${token}` } }
-            })
+            new StreamableHTTPClientTransport(
+                new URL("http://localhost/admin/mcp"),
+                {
+                    fetch: async (url, init) => await mcp.request(url, init),
+                    requestInit: {
+                        headers: { Authorization: `Bearer ${token}` }
+                    }
+                }
+            )
         )
         const text = (result: Awaited<ReturnType<Client["callTool"]>>) =>
             (Array.isArray(result.content) ? result.content : [])

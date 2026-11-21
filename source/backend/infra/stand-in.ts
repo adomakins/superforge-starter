@@ -8,6 +8,7 @@ import {
 import { randomToken } from "@/backend/auth/tokens"
 import { MINUTE } from "@/utilities/primitives/durations"
 import type { AgentScope } from "@/utilities/schemas/agents"
+import { MCP_PATH } from "@/utilities/schemas/agents"
 import { COMMENT_BODY_LIMIT } from "@/utilities/schemas/comments"
 import { checkToken } from "./agents"
 import { filed_comment } from "./comments"
@@ -232,7 +233,7 @@ export async function standInAgentToken({
     })
         .setProtectedHeader({ alg: "ES256", kid: "stand-in", typ: "at+jwt" })
         .setIssuer(origin)
-        .setAudience(`${origin}/mcp`)
+        .setAudience(`${origin}${MCP_PATH}`)
         .setSubject(email)
         .setIssuedAt()
         .setExpirationTime(expires_in)

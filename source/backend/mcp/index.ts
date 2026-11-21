@@ -3,10 +3,12 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import { Hono } from "hono"
 import { z } from "zod"
+import { MCP_PATH } from "@/utilities/schemas/agents"
 import { api, type apiWith } from "../index"
 import { requestOrigin } from "../infra/agents"
 
-// The app's own MCP, at /mcp (source/server.ts), which Claude connects to
+// The app's own MCP, at /admin/mcp (`MCP_PATH`, source/server.ts), which
+// Claude connects to
 // as one of the business's own people, once they've allowed it on the app's
 // Allow page (agents/). It's a client of the app's own API, never of the
 // database: each tool calls the API in this process with the token Claude
@@ -27,9 +29,12 @@ type Api = ReturnType<typeof apiWith>
 // The methods a route can have, as call_api takes them
 const METHODS = ["GET", "POST", "PATCH", "PUT", "DELETE"] as const
 
-/** The MCP, answering at /mcp, on this API: the server's, below, or a test's */
+/**
+ * The MCP, answering at `MCP_PATH`, on this API: the server's, below, or a
+ * test's
+ */
 export function mcpWith(api: Api) {
-    return new Hono().all("/mcp", async (context) => {
+    return new Hono().all(MCP_PATH, async (context) => {
         const authorization = context.req.header("Authorization")
         const origin = requestOrigin(context.req.url)
         const base = new URL(context.req.url).origin
@@ -49,7 +54,7 @@ export function mcpWith(api: Api) {
                 .parse(await session.json()).user !== null
         if (!signed_in) {
             const challenge = [
-                `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`,
+                `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource${MCP_PATH}"`,
                 authorization === undefined ? null : 'error="invalid_token"'
             ]
                 .filter((part) => part !== null)

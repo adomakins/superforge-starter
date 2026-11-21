@@ -1,6 +1,16 @@
 import { z } from "zod"
 
 /**
+ * Where the app's own MCP answers: under `/admin`, since it's for the
+ * business's own people, as the admin is. `/mcp` is left free on purpose,
+ * for an MCP the business may give its customers one day, signed in as one
+ * of them, with tokens of its own: Infra signs each token for one path, so
+ * one MCP's tokens never open the other. Until there is one, Infra signs
+ * Claude in to this path alone (backend/mcp/README.md).
+ */
+export const MCP_PATH = "/admin/mcp"
+
+/**
  * What someone on the team lets Claude do in the app, as they allow it on
  * the Allow page: `read`, the API's `GET` routes, and `act`, everything
  * else they could do themselves, but sign anyone in or out. The API
