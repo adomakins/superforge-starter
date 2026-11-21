@@ -47,6 +47,28 @@ A patch release (`0.1.1`) fixes something; a minor release (`0.2.0`) adds
 or changes something. Until `1.0.0`, a minor release may also change how
 something already there works, which its notes flag.
 
+## 0.8.0 (2026-11-21)
+
+The app's MCP moves to `/admin/mcp`. It's the admin's, for the business's
+own people, so it sits under `/admin`, and `/mcp` is left free for an MCP
+the business may one day give its customers.
+
+- **The MCP at `/admin/mcp`**, machinery. **Owner**: `MCP_PATH`, new in
+  `source/utilities/schemas/agents.ts`, is where the MCP answers
+  (`source/server.ts`, `backend/mcp/index.ts`), what its sign-in
+  challenge and `/.well-known/oauth-protected-resource/admin/mcp` name
+  (`backend/agents/oauth.ts`), and the audience of every token the app
+  takes (`backend/infra/agents.ts`, and the stand-in's). `/mcp` answers
+  nothing, on purpose: a customers' MCP would go there, signed in as one
+  of them, with tokens of its own, since Infra signs each token for one
+  MCP's path. The MCP's `README.md` says why. Superforge Infra now signs
+  Claude in to `/admin/mcp` alone, so a copy still on `0.7.0` can't
+  connect Claude until it takes this. **Owner**: a Claude connected at
+  `https://<domain>/mcp` (a connector on claude.ai, or `claude mcp add`)
+  is removed and added again at `https://<domain>/admin/mcp`, and the
+  person allows it once more. How to tell a copy already has it:
+  `MCP_PATH` in `source/utilities/schemas/agents.ts`.
+
 ## 0.7.0 (2026-11-21)
 
 Analytics of the app's own: what visitors view and click, and what the

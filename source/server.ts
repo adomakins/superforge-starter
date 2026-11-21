@@ -4,6 +4,7 @@ import { oauth } from "./backend/agents/oauth"
 import { mcp } from "./backend/mcp"
 import { syncAppInternalUsers } from "./backend/users/sync"
 import { startWorkflows } from "./backend/workflows/engine"
+import { MCP_PATH } from "./utilities/schemas/agents"
 
 // What the Node server runs once it's listening (source/node.ts): the
 // internal users made to follow the list in backend/auth/access.ts
@@ -22,7 +23,7 @@ if (import.meta.env.DEV) {
 
 // The client build's files, every prerendered page among them, never reach
 // this: the Node server answers them first (source/node.ts), and so does
-// Vite's dev server. So this sees /api, the app's own MCP (/mcp,
+// Vite's dev server. So this sees /api, the app's own MCP (/admin/mcp,
 // backend/mcp/) and where Claude signs in to it (/.well-known/oauth-* and
 // /oauth/*, backend/agents/oauth.ts), and anything that isn't a page (a
 // 404).
@@ -31,7 +32,7 @@ export default createServerEntry({
         const { pathname } = new URL(request.url)
         if (pathname.startsWith("/api/")) {
             return api.fetch(request)
-        } else if (pathname === "/mcp") {
+        } else if (pathname === MCP_PATH) {
             return mcp.fetch(request)
         } else if (
             pathname.startsWith("/oauth/") ||

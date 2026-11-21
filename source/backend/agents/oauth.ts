@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { AGENT_SCOPES } from "@/utilities/schemas/agents"
+import { AGENT_SCOPES, MCP_PATH } from "@/utilities/schemas/agents"
 import { appInfra, type Infra } from "../infra"
 import { requestOrigin } from "../infra/agents"
 
@@ -24,7 +24,7 @@ export function oauthWith(infra: () => Infra) {
     const resource = (request_url: string) => {
         const origin = requestOrigin(request_url)
         return {
-            resource: `${origin}/mcp`,
+            resource: `${origin}${MCP_PATH}`,
             authorization_servers: [origin],
             scopes_supported: [...AGENT_SCOPES],
             bearer_methods_supported: ["header"]
@@ -36,7 +36,7 @@ export function oauthWith(infra: () => Infra) {
                 "Cache-Control": "no-store"
             })
         )
-        .get("/.well-known/oauth-protected-resource/mcp", (context) =>
+        .get(`/.well-known/oauth-protected-resource${MCP_PATH}`, (context) =>
             context.json(resource(context.req.url), 200, {
                 "Cache-Control": "no-store"
             })

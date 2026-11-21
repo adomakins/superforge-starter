@@ -1,20 +1,29 @@
 # The app's MCP
 
-An MCP server at the app's own `/mcp`, so Claude, on a laptop, in a cloud
-session or in claude.ai, can read the app's data and work in it as one of
-the business's own people. It's MCP's Streamable HTTP without sessions:
-each request gets a server of its own and a plain JSON answer, so a
-deploy loses nothing.
+An MCP server at the app's own `/admin/mcp`, so Claude, on a laptop, in a
+cloud session or in claude.ai, can read the app's data and work in it as
+one of the business's own people. It's MCP's Streamable HTTP without
+sessions: each request gets a server of its own and a plain JSON answer,
+so a deploy loses nothing.
+
+**Why `/admin/mcp`, not `/mcp`.** This MCP is the admin's: it's for the
+business's own people, as the admin is, so it sits under `/admin`. `/mcp`
+is left free on purpose, for an MCP the business may one day give its
+customers, signed in as one of them, with tools of its own and tokens of
+its own. Infra signs each token for one MCP's path, so the two never open
+each other. Until a business builds one, `/mcp` answers nothing, and
+Infra signs Claude in to `/admin/mcp` alone. The path is `MCP_PATH`
+(`utilities/schemas/agents.ts`), which everything that names it reads.
 
 ## How Claude connects
 
 **Nobody sets anything up, or pastes a token.** Add the app's
-`https://<its domain>/mcp` to Claude once: as a connector on claude.ai
+`https://<its domain>/admin/mcp` to Claude once: as a connector on claude.ai
 (Settings, Connectors), which reaches claude.ai, the desktop app, cloud
 sessions and scheduled tasks, or in Claude Code. Then:
 
-1. Claude calls `/mcp` and is told to sign in: a 401 with
-   `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource/mcp"`.
+1. Claude calls `/admin/mcp` and is told to sign in: a 401 with
+   `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource/admin/mcp"`.
 2. Claude reads where to sign in, the app itself
    (`backend/agents/oauth.ts`), and opens the browser at the app's
    `/oauth/authorize`, which Superforge Infra answers through the app.
@@ -26,7 +35,7 @@ sessions and scheduled tasks, or in Claude Code. Then:
    ends it within ten minutes.
 
 A dev server connects the same way with an Infra test key
-(`INFRA_TEST_KEY`), at `http://localhost:3000/mcp`. Without one, the
+(`INFRA_TEST_KEY`), at `http://localhost:3000/admin/mcp`. Without one, the
 stand-in can't sign Claude in.
 
 ## How it works

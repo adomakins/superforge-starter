@@ -1,7 +1,11 @@
 import { createRemoteJWKSet, type JWTVerifyGetKey, jwtVerify } from "jose"
 import { z } from "zod"
 import { SECOND } from "@/utilities/primitives/durations"
-import { AGENT_SCOPES, type AgentScope } from "@/utilities/schemas/agents"
+import {
+    AGENT_SCOPES,
+    type AgentScope,
+    MCP_PATH
+} from "@/utilities/schemas/agents"
 
 // Claude signing in to the app's own MCP, through Infra: Infra is the OAuth
 // server, and the app only checks the tokens it signs, with Infra's public
@@ -15,7 +19,7 @@ import { AGENT_SCOPES, type AgentScope } from "@/utilities/schemas/agents"
  * on this computer, as a dev server is. Behind Railway's proxy a request's
  * own address says http though the browser's said https, so only the host
  * counts. Every token Claude holds is bound to it, as its issuer, and with
- * `/mcp`, its audience.
+ * the MCP's path (`MCP_PATH`), its audience.
  */
 export function requestOrigin(request_url: string) {
     const { host, hostname } = new URL(request_url)
@@ -184,7 +188,7 @@ export function infraKeys(url: string): JWTVerifyGetKey {
 
 /**
  * Checks a token Claude brings, as Infra's README says to: Infra signed it,
- * for this app's origin and its `/mcp`, for this project in the key's
+ * for this app's origin and its MCP (`MCP_PATH`), for this project in the key's
  * mode, and it hasn't run out. `project` is the app's own project ID and
  * mode, as `GET /v1/project` answers them.
  */
@@ -196,7 +200,7 @@ export async function checkToken(
     try {
         const { payload } = await jwtVerify(token, keys, {
             issuer: expected.origin,
-            audience: `${expected.origin}/mcp`,
+            audience: `${expected.origin}${MCP_PATH}`,
             algorithms: ["ES256"]
         })
         const claims = agent_claims.safeParse(payload)

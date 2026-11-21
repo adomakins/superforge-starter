@@ -116,7 +116,7 @@ checks the tokens it signs**: Infra's README, "Claude", has the flow.
 - **`checkAgentToken`** checks a token Claude brings with Infra's public
   keys (`/.well-known/jwks.json` on Infra's host, fetched once and again
   for a key it doesn't have), never asking Infra: signed by Infra, for
-  this origin and its `/mcp`, for this project in the key's mode (which
+  this origin and its `/admin/mcp`, for this project in the key's mode (which
   `GET /v1/project` says, asked once), and not run out. It answers whose
   address it is and what they allowed. `backend/auth/agents.ts` then
   decides whether that person is still one of the business's own.
