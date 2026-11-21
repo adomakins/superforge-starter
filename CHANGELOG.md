@@ -11,9 +11,10 @@ version and the latest before it applies any of them. A copy keeps this
 file as its updates leave it, so don't edit it in a copy: the copy's own
 history is its git log.
 
-In the template, a change merged since the last release has its notes
-under `## Unreleased` at the top, until the release that ships it gives
-that heading its version and day (`## 0.2.0 (2026-12-01)`).
+In the template, every PR that changes what a copy gets is a release of
+its own, with its notes under its version and day (`## 0.3.0
+(2026-12-01)`) and that version in `.superforge/superforge.json`
+(`README.md`, "This template", "Releases").
 
 ## How a release is written
 
