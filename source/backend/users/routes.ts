@@ -2,7 +2,7 @@ import { Hono } from "hono"
 import { z } from "zod"
 import { user_addition, user_change } from "@/utilities/schemas/users"
 import { listedInternal } from "../auth/access"
-import { internalOnly } from "../auth/signed-in"
+import { inBrowser, internalOnly } from "../auth/signed-in"
 import type { ApiEnvironment } from "../context"
 import { failure, validated } from "../failures"
 import { addUser } from "./add"
@@ -37,6 +37,7 @@ export const userRoutes = new Hono<ApiEnvironment>()
     .post(
         "/users",
         internalOnly,
+        inBrowser,
         validated("json", user_addition),
         async (context) => {
             const addition = context.req.valid("json")
@@ -64,6 +65,7 @@ export const userRoutes = new Hono<ApiEnvironment>()
     .patch(
         "/users/:id",
         internalOnly,
+        inBrowser,
         validated("param", user_path),
         validated("json", user_change),
         async (context) => {
@@ -94,6 +96,7 @@ export const userRoutes = new Hono<ApiEnvironment>()
     .delete(
         "/users/:id",
         internalOnly,
+        inBrowser,
         validated("param", user_path),
         async (context) => {
             const { id } = context.req.valid("param")

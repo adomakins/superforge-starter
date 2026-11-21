@@ -1,4 +1,16 @@
+import type { z } from "zod"
 import { SECOND } from "@/utilities/primitives/durations"
+import {
+    agent_connections,
+    agent_ended,
+    agent_redirect,
+    agent_refused,
+    agent_request,
+    checkToken,
+    infra_project,
+    infraKeys,
+    passThrough
+} from "./agents"
 import {
     comment_refused,
     events_refused,
@@ -13,7 +25,7 @@ import {
     verify_refused
 } from "./answers"
 import { eventsBody } from "./events"
-import type { Infra, InfraUnavailable } from "./index"
+import type { AgentRefused, Infra, InfraUnavailable } from "./index"
 
 /**
  * Infra's API, which a project's keys call. A server can be pointed at
@@ -49,14 +61,22 @@ export function infraClient({
 }): Infra {
     // One call: its status and its JSON, or null when it never answered or
     // answered something that isn't JSON, which is logged
-    async function post(call: string, body: unknown, timeout = TIMEOUT) {
+    async function ask(
+        method: "GET" | "POST" | "DELETE",
+        call: string,
+        body?: unknown,
+        timeout = TIMEOUT
+    ) {
         const response = await send(`${url}${call}`, {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${key}`,
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(body),
+            method,
+            headers:
+                body === undefined
+                    ? { Authorization: `Bearer ${key}` }
+                    : {
+                          Authorization: `Bearer ${key}`,
+                          "Content-Type": "application/json"
+                      },
+            body: body === undefined ? undefined : JSON.stringify(body),
             signal: AbortSignal.timeout(timeout)
         }).catch((error: unknown) => {
             console.error("Infra didn't answer", { call, error })
@@ -78,6 +98,50 @@ export function infraClient({
         } else {
             console.info("Infra answered", { call, status: response.status })
             return { status: response.status, json }
+        }
+    }
+    const post = (call: string, body: unknown, timeout = TIMEOUT) =>
+        ask("POST", call, body, timeout)
+
+    // Claude's sign-in (agents.ts): Infra's public keys, fetched once and
+    // again for a key they don't have, and which project and mode the key
+    // is, which every token must be for, asked once
+    const keys = infraKeys(url)
+    let project: ReturnType<typeof projectOf> | undefined
+    async function projectOf() {
+        const answer = await ask("GET", "/project")
+        const parsed = infra_project.safeParse(answer?.json)
+        if (answer?.status === 200 && parsed.success) {
+            return parsed.data
+        } else {
+            console.error("Infra didn't say which project the key is", {
+                status: answer?.status
+            })
+            return null
+        }
+    }
+
+    // A call about Claude's requests and connections: its answer, or why
+    // Infra refused it, or that it couldn't be asked
+    async function agents<Schema extends z.ZodType>(
+        method: "GET" | "POST" | "DELETE",
+        call: string,
+        schema: Schema,
+        body?: unknown
+    ): AsyncOperation<z.output<Schema>, AgentRefused | InfraUnavailable> {
+        const answer = await ask(method, call, body)
+        if (answer === null) {
+            return { ok: false, error: UNAVAILABLE }
+        } else if (answer.status === 200) {
+            const parsed = schema.safeParse(answer.json)
+            return parsed.success
+                ? { ok: true, data: parsed.data }
+                : unexpected(call, answer)
+        } else {
+            const parsed = agent_refused.safeParse(answer.json)
+            return parsed.success
+                ? { ok: false, error: parsed.data }
+                : unexpected(call, answer)
         }
     }
 
@@ -242,6 +306,89 @@ export function infraClient({
                 } else {
                     return unexpected(call, answer)
                 }
+            }
+        },
+
+        passOAuth(request, path, origin) {
+            return passThrough({ url, key, send, request, path, origin })
+        },
+
+        async agentRequest(request_id) {
+            const asked = await agents(
+                "GET",
+                `/agents/requests/${request_id}`,
+                agent_request
+            )
+            return asked.ok ? { ok: true, data: asked.data.request } : asked
+        },
+
+        allowAgent(request_id, allowed) {
+            return agents(
+                "POST",
+                `/agents/requests/${request_id}/allow`,
+                agent_redirect,
+                allowed
+            )
+        },
+
+        denyAgent(request_id) {
+            return agents(
+                "POST",
+                `/agents/requests/${request_id}/deny`,
+                agent_redirect,
+                {}
+            )
+        },
+
+        async agentConnections(email) {
+            const query = new URLSearchParams({ email })
+            const listed = await agents(
+                "GET",
+                `/agents/connections?${query}`,
+                agent_connections
+            )
+            if (listed.ok) {
+                return { ok: true, data: listed.data.connections }
+            } else {
+                return { ok: false, error: UNAVAILABLE }
+            }
+        },
+
+        async endAgentConnection(connection_id) {
+            const ended = await agents(
+                "DELETE",
+                `/agents/connections/${connection_id}`,
+                agent_ended
+            )
+            return ended.ok ? { ok: true, data: null } : ended
+        },
+
+        async endAgentConnections(email) {
+            const query = new URLSearchParams({ email })
+            const ended = await agents(
+                "DELETE",
+                `/agents/connections?${query}`,
+                agent_ended
+            )
+            if (ended.ok) {
+                return { ok: true, data: ended.data.ended }
+            } else {
+                return { ok: false, error: UNAVAILABLE }
+            }
+        },
+
+        async checkAgentToken(token, origin) {
+            project ??= projectOf()
+            const known = await project
+            if (known === null) {
+                project = undefined
+                return { ok: false, error: UNAVAILABLE }
+            } else {
+                return await checkToken(keys, token, {
+                    origin,
+                    project: known.project.id,
+                    mode: known.mode
+                })
             }
         }
     }

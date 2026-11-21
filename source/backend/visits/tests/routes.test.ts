@@ -35,6 +35,7 @@ function recordingInfra(sendVisit?: Infra["sendVisit"]) {
     const sent: Visit[] = []
     const stand_in = standInInfra()
     const infra: Infra = {
+        ...stand_in,
         startSignIn: (request) => stand_in.startSignIn(request),
         verifySignIn: (proof) => stand_in.verifySignIn(proof),
         sendEvents: (events) => stand_in.sendEvents(events),

@@ -2,10 +2,12 @@ import type { Context } from "hono"
 import { deleteCookie, getCookie, setCookie } from "hono/cookie"
 import { createFactory } from "hono/factory"
 import type { Database } from "@/database"
+import { AGENT_SCOPES, type AgentScope } from "@/utilities/schemas/agents"
 import { isInternal } from "@/utilities/schemas/users"
 import type { ApiEnvironment } from "../context"
 import { failure } from "../failures"
 import { type Access, roleFor } from "./access"
+import { agentUser, bearerToken } from "./agents"
 import {
     liveSession,
     renewSession,
@@ -13,12 +15,13 @@ import {
     type SessionUser
 } from "./sessions"
 
-// Who's signed in: the `session` cookie, and the middleware that reads it.
-// This is the one place that decides who's signed in, so a route that
-// needs the user takes `signedIn` (or `maybeSignedIn`, or `internalOnly`)
-// and reads `context.var.user`; nothing else reads the cookie. Their role
-// is the one access.ts gives them, whatever the database says, so only the
-// people listed there are ever internal.
+// Who's signed in: the `session` cookie, or the token Claude brings in its
+// place (agents.ts), and the middleware that reads them. This is the one
+// place that decides who's signed in, so a route that needs the user takes
+// `signedIn` (or `maybeSignedIn`, or `internalOnly`) and reads
+// `context.var.user`; nothing else reads the cookie or the token. Their
+// role is the one access.ts gives them, whatever the database says, so
+// only the people listed there are ever internal.
 
 const COOKIE = "session"
 
@@ -66,48 +69,54 @@ export function secureCookie(request_url: string) {
     return !(protocol === "http:" && (local || import.meta.env.DEV))
 }
 
-/** The session a request came with, as a route behind `signedIn` sees it. */
+/**
+ * The session a request came with, as a route behind `signedIn` sees it.
+ * Claude's requests have none, and get `AGENT_SESSION`, which no session's
+ * id ever is.
+ */
 export type RequestSession = { id: string }
+
+/** The session Claude's requests get, which is never a real one's id */
+export const AGENT_SESSION: RequestSession = { id: "agent" }
+
+/**
+ * How a request signed in: a browser, by its `session` cookie, or Claude,
+ * by an access token Infra signed (`Authorization: Bearer`), acting as one
+ * of the business's own people (agents.ts)
+ */
+export type SignedInWith = "session" | "agent"
 
 type SignedIn = {
     Variables: ApiEnvironment["Variables"] & {
         user: SessionUser
         session: RequestSession
+        signed_in_with: SignedInWith
+        /** What the request may do: everything for a browser */
+        scopes: readonly AgentScope[]
     }
 }
 
 /**
- * Lets a request through only with a live session, and puts its user on
- * `context.var.user`, and the session's id on `context.var.session`;
- * without one, it's answered 401 `signed-out`. It also renews the session,
- * keeping the same token, so coming back keeps someone signed in. One that
- * has ended stays ended.
+ * Lets a request through only when someone is signed in, and puts their
+ * user on `context.var.user`, the session's id on `context.var.session`,
+ * and how they signed in on `context.var.signed_in_with`; without one,
+ * it's answered 401 `signed-out`. A browser's session is renewed, keeping
+ * the same token, so coming back keeps someone signed in, and one that has
+ * ended stays ended. Claude, with a token, gets through as the person who
+ * allowed it, while they're one of the business's own, and with only
+ * `read`, makes `GET` requests alone (403 `read-only`).
  */
 export const signedIn = createFactory<SignedIn>().createMiddleware(
     // From a factory rather than plain `createMiddleware`, so the 401 below
     // is inferred into each route's type and the typed client knows it
     async (context, next) => {
-        const token = sessionToken(context)
-        const session =
-            token === undefined
-                ? undefined
-                : await currentSession(
-                      context.var.database,
-                      context.var.access,
-                      token
-                  )
-        if (token === undefined || session === undefined) {
+        const asking = await whoIsAsking(context)
+        if (asking === undefined) {
             return failure(context, 401, "signed-out", "Sign in first")
+        } else if (!mayDo(context, asking)) {
+            return readOnly(context)
         } else {
-            context.set("user", session.user)
-            context.set("session", { id: session.id })
-            await renewed(
-                context,
-                context.var.database,
-                token,
-                session.renewable,
-                next
-            )
+            return await letThrough(context, asking, next)
         }
     }
 )
@@ -119,34 +128,42 @@ export const signedIn = createFactory<SignedIn>().createMiddleware(
  */
 export const internalOnly = createFactory<SignedIn>().createMiddleware(
     async (context, next) => {
-        const token = sessionToken(context)
-        const session =
-            token === undefined
-                ? undefined
-                : await currentSession(
-                      context.var.database,
-                      context.var.access,
-                      token
-                  )
-        if (token === undefined || session === undefined) {
+        const asking = await whoIsAsking(context)
+        if (asking === undefined) {
             return failure(context, 401, "signed-out", "Sign in first")
-        } else if (!isInternal(session.user.role)) {
+        } else if (!isInternal(asking.user.role)) {
             return failure(
                 context,
                 403,
                 "not-internal",
                 "Only the business's own people can see this"
             )
+        } else if (!mayDo(context, asking)) {
+            return readOnly(context)
         } else {
-            context.set("user", session.user)
-            context.set("session", { id: session.id })
-            await renewed(
+            return await letThrough(context, asking, next)
+        }
+    }
+)
+
+/**
+ * After `signedIn` or `internalOnly`, for what only a person in a browser
+ * may do, never Claude with a token: who can sign in and where someone's
+ * signed in, Claude's own connections, and allowing Claude in. So a token
+ * that leaks can't make itself more, or lock anyone out. Answers 403
+ * `browser-only`.
+ */
+export const inBrowser = createFactory<SignedIn>().createMiddleware(
+    async (context, next) => {
+        if (context.var.signed_in_with !== "session") {
+            return failure(
                 context,
-                context.var.database,
-                token,
-                session.renewable,
-                next
+                403,
+                "browser-only",
+                "Only a person signed in on the dashboard can do this"
             )
+        } else {
+            await next()
         }
     }
 )
@@ -160,29 +177,108 @@ export const internalOnly = createFactory<SignedIn>().createMiddleware(
 export const maybeSignedIn = createFactory<{
     Variables: ApiEnvironment["Variables"] & { user: SessionUser | null }
 }>().createMiddleware(async (context, next) => {
-    const token = sessionToken(context)
-    const session =
-        token === undefined
-            ? undefined
-            : await currentSession(
-                  context.var.database,
-                  context.var.access,
-                  token
-              )
-    if (token === undefined || session === undefined) {
+    const asking = await whoIsAsking(context)
+    if (asking === undefined) {
         context.set("user", null)
         await next()
+    } else if (asking.by === "agent") {
+        context.set("user", asking.user)
+        await next()
     } else {
-        context.set("user", session.user)
+        context.set("user", asking.user)
         await renewed(
             context,
             context.var.database,
-            token,
-            session.renewable,
+            asking.token,
+            asking.renewable,
             next
         )
     }
 })
+
+// Who's asking: a browser's session, by its cookie, with its user's role
+// as access.ts gives it, or Claude, by its token (agents.ts). A request
+// with a token is Claude's whatever cookie it carries, and one with a bad
+// token is nobody's.
+type Asking =
+    | {
+          by: "session"
+          user: SessionUser
+          id: string
+          token: string
+          renewable: boolean
+      }
+    | { by: "agent"; user: SessionUser; scopes: AgentScope[] }
+
+async function whoIsAsking<Environment extends ApiEnvironment>(
+    context: Context<Environment>
+): Promise<Asking | undefined> {
+    const variables: ApiEnvironment["Variables"] = context.var
+    const bearer = bearerToken(context.req.header("Authorization"))
+    if (bearer !== null) {
+        const agent = await agentUser(variables, bearer, context.req.url)
+        return agent === undefined ? undefined : { by: "agent", ...agent }
+    }
+    const token = sessionToken(context)
+    const session =
+        token === undefined
+            ? undefined
+            : await currentSession(variables.database, variables.access, token)
+    if (token === undefined || session === undefined) {
+        return undefined
+    } else {
+        return {
+            by: "session",
+            user: session.user,
+            id: session.id,
+            token,
+            renewable: session.renewable
+        }
+    }
+}
+
+// Whether what's asking may make this request: anyone may read, and only
+// a browser or Claude with `act` may change anything
+function mayDo(context: Context, asking: Asking) {
+    const reads = ["GET", "HEAD"].includes(context.req.method)
+    return reads || asking.by === "session" || asking.scopes.includes("act")
+}
+
+function readOnly(context: Context) {
+    return failure(
+        context,
+        403,
+        "read-only",
+        "Claude was allowed to read here, not to change anything"
+    )
+}
+
+// Puts who's asking on `context` and runs the route, renewing a browser's
+// session as it goes
+async function letThrough(
+    context: Context<SignedIn>,
+    asking: Asking,
+    next: () => Promise<void>
+) {
+    context.set("user", asking.user)
+    if (asking.by === "agent") {
+        context.set("session", AGENT_SESSION)
+        context.set("signed_in_with", "agent")
+        context.set("scopes", asking.scopes)
+        await next()
+    } else {
+        context.set("session", { id: asking.id })
+        context.set("signed_in_with", "session")
+        context.set("scopes", AGENT_SCOPES)
+        await renewed(
+            context,
+            context.var.database,
+            asking.token,
+            asking.renewable,
+            next
+        )
+    }
+}
 
 // The live session behind this token, with its user's role as access.ts
 // gives it

@@ -16,6 +16,7 @@ function recordingInfra(sendEvents?: Infra["sendEvents"]) {
     const sent: ServerEvent[][] = []
     const stand_in = standInInfra()
     const infra: Infra = {
+        ...stand_in,
         startSignIn: (request) => stand_in.startSignIn(request),
         verifySignIn: (proof) => stand_in.verifySignIn(proof),
         sendEvents: async (events) => {

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { parseEnv } from "node:util"
 import { z } from "zod"
+import { unavailableOAuth } from "./agents"
 import { INFRA_URL, infraClient } from "./client"
 import type { Infra, InfraUnavailable } from "./index"
 import { standInInfra, type WaitingSignIn } from "./stand-in"
@@ -212,6 +213,30 @@ function unavailableInfra(): Infra {
             return unavailable
         },
         async query() {
+            return unavailable
+        },
+        async passOAuth() {
+            return unavailableOAuth()
+        },
+        async agentRequest() {
+            return unavailable
+        },
+        async allowAgent() {
+            return unavailable
+        },
+        async denyAgent() {
+            return unavailable
+        },
+        async agentConnections() {
+            return unavailable
+        },
+        async endAgentConnection() {
+            return unavailable
+        },
+        async endAgentConnections() {
+            return unavailable
+        },
+        async checkAgentToken() {
             return unavailable
         }
     }

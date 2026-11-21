@@ -7,7 +7,7 @@ import {
     endSessionById,
     listSessions
 } from "../auth/sessions"
-import { signedIn } from "../auth/signed-in"
+import { inBrowser, signedIn } from "../auth/signed-in"
 import type { ApiEnvironment } from "../context"
 import { failure, validated } from "../failures"
 import { renameUser } from "./rename"
@@ -21,7 +21,9 @@ const session_path = z.object({ id: z.string().regex(/^[0-9a-f]{16}$/) })
  * role: what they're called, and the browsers they're signed in on, with
  * signing out of the others. Their address is who they are, so it doesn't
  * change here, and neither does the name of one of the business's own,
- * which is the one they're listed with in code (auth/access.ts).
+ * which is the one they're listed with in code (auth/access.ts). Where
+ * they're signed in is a browser's to see and end, never Claude's
+ * (`inBrowser`).
  */
 export const accountRoutes = new Hono<ApiEnvironment>()
     .patch(
@@ -47,7 +49,7 @@ export const accountRoutes = new Hono<ApiEnvironment>()
     )
 
     // Where they're signed in, this browser's session marked as current
-    .get("/account/sessions", signedIn, async (context) => {
+    .get("/account/sessions", signedIn, inBrowser, async (context) => {
         const sessions = await listSessions(
             context.var.database,
             context.var.user.id
@@ -68,6 +70,7 @@ export const accountRoutes = new Hono<ApiEnvironment>()
     .delete(
         "/account/sessions/:id",
         signedIn,
+        inBrowser,
         validated("param", session_path),
         async (context) => {
             const { id } = context.req.valid("param")
@@ -93,15 +96,20 @@ export const accountRoutes = new Hono<ApiEnvironment>()
     )
 
     // Signs every other browser out, keeping this one
-    .post("/account/sessions/sign-out-others", signedIn, async (context) => {
-        const ended = await endOtherSessions(
-            context.var.database,
-            context.var.user.id,
-            context.var.session.id
-        )
-        console.info("Signed out everywhere else", {
-            user_id: context.var.user.id,
-            ended
-        })
-        return context.json({ ended }, 200)
-    })
+    .post(
+        "/account/sessions/sign-out-others",
+        signedIn,
+        inBrowser,
+        async (context) => {
+            const ended = await endOtherSessions(
+                context.var.database,
+                context.var.user.id,
+                context.var.session.id
+            )
+            console.info("Signed out everywhere else", {
+                user_id: context.var.user.id,
+                ended
+            })
+            return context.json({ ended }, 200)
+        }
+    )

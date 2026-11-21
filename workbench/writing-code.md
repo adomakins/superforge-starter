@@ -31,7 +31,7 @@ not a preference. There are three ways into the data, and if each read and
 wrote it its own way, their checks would drift apart:
 
 ```text
- Website (pages)          Scripts, agents            Workflows (DBOS)
+ Website (pages)          Claude, through /mcp       Workflows (DBOS)
        │ the typed client       │ HTTP, with a token         │
        └───────────────► routes under /api                   │
                                ▼                             ▼
@@ -53,6 +53,12 @@ wrote it its own way, their checks would drift apart:
   data asks the API, through TanStack Query.
 - **`database/` is imported only by `backend/`**, and by its own scripts
   and tests.
+- **Claude is one of the ways in.** It connects to the app's MCP
+  (`backend/mcp/`), signed in as one of the business's own people with a
+  token Infra signs, which `signedIn` takes in a cookie's place
+  (`backend/auth/agents.ts`), and its tools call the routes under `/api`
+  in this process. So every route is a tool, with its checks, and a
+  route that changes who can sign in takes `inBrowser`, so no token can.
 - **A feature is a route before it's a screen.** Anything a person or an
   agent can do is a route, with its checks, so a script or an agent can do
   through the same route what a person does on the site. A workflow, which
