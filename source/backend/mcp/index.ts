@@ -19,7 +19,8 @@ const INSTRUCTIONS = `This is the business's own app. You're signed in to it as 
 
 - Start with list_routes, which lists every route of the app's API, then call one with call_api.
 - Every route answers JSON. A failure is { error: { reason, message } }: read the reason, and tell the person what it says.
-- Ask the person before anything that changes their data or reaches their customers, like adding, removing or sending something.`
+- Ask the person before anything that changes their data or reaches their customers, like adding, removing or sending something.
+- To change many rows at once, use a job, never a route called in a loop: GET /api/jobs lists them, POST /api/jobs/:name with { input } is a dry run that says what it would change, and { input, dry_run: false } starts it. Show the person the dry run, and start it only once they say so. /api/workflows/runs/:id shows how a run went. A change no job makes is code to write in the codebase, not something to do here.`
 
 type Api = ReturnType<typeof apiWith>
 

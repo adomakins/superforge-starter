@@ -12,6 +12,7 @@ import type { ApiEnvironment } from "./context"
 import { answerNotFound, answerUnexpected } from "./failures"
 import { healthRoutes } from "./health/routes"
 import { appInfra } from "./infra"
+import { jobRoutes } from "./jobs/routes"
 import { userRoutes } from "./users/routes"
 import { visitRoutes } from "./visits/routes"
 import { dbosWorkflows } from "./workflows/engine"
@@ -94,6 +95,10 @@ export function apiWith(variables: () => ApiEnvironment["Variables"]) {
             // runs, under /workflows
             .route("/", userRoutes)
             .route("/", workflowRoutes)
+
+            // The changes to the app's data someone starts on purpose, each
+            // a dry run first, under /jobs (jobs/)
+            .route("/", jobRoutes)
 
             // Claude connecting to the app's MCP: the Allow page, under
             // /connect, and someone's connections, under
