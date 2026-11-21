@@ -279,18 +279,19 @@ isn't there, 409 for a conflict, 503 for a dependency that's down.
 There's **one database, Postgres**, on Railway, queried with Drizzle
 (`drizzle-orm/node-postgres`) from `source/database/`.
 
-|                       | Postgres                                                                    |
-| --------------------- | --------------------------------------------------------------------------- |
-| Holds                 | the users, in `public`, with their roles, and their sessions, in `auth`     |
-| And                   | DBOS's, the workflows' runs and steps, in `dbos` (`backend/workflows/`)     |
-| Schema                | `source/database/schema.ts`                                                 |
-| New migration         | `pnpm database:generate`, into `source/database/migrations/`                |
-| Applied in production | `pnpm database:migrate`, Railway's pre-deploy command, before each deploy   |
-| `pnpm dev` uses       | the checkout's own (`source/database/local/`), with the branch's migrations |
-| The tests use         | a database of each test's own, on the checkout's Postgres, in CI too        |
-| Checked in CI by      | `pnpm database:check`, the tests from empty, and the PR's upgrade test      |
-| Read by hand with     | `pnpm database:sql "<query>"`, or the database's Data tab on Railway        |
-| Restored with         | point-in-time recovery, to any moment in about the last four weeks (below)  |
+|                       | Postgres                                                                     |
+| --------------------- | ---------------------------------------------------------------------------- |
+| Holds                 | the users, in `public`, with their roles, and their sessions, in `auth`      |
+| And                   | the site's analytics, `analytics_visits` and `analytics_events`, in `public` |
+| And                   | DBOS's, the workflows' runs and steps, in `dbos` (`backend/workflows/`)      |
+| Schema                | `source/database/schema.ts`                                                  |
+| New migration         | `pnpm database:generate`, into `source/database/migrations/`                 |
+| Applied in production | `pnpm database:migrate`, Railway's pre-deploy command, before each deploy    |
+| `pnpm dev` uses       | the checkout's own (`source/database/local/`), with the branch's migrations  |
+| The tests use         | a database of each test's own, on the checkout's Postgres, in CI too         |
+| Checked in CI by      | `pnpm database:check`, the tests from empty, and the PR's upgrade test       |
+| Read by hand with     | `pnpm database:sql "<query>"`, or the database's Data tab on Railway         |
+| Restored with         | point-in-time recovery, to any moment in about the last four weeks (below)   |
 
 The conventions every table follows are in `schema.ts`'s header: named for
 what it hangs off, snake_case columns, uuids for our own rows, every

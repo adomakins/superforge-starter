@@ -53,8 +53,8 @@ const CLICK_IDS = [
 ] as const
 
 /**
- * A page's path as Infra takes it: from `/`, at most 2,048 characters,
- * with no query or fragment.
+ * A page's path as the server takes it: from `/`, at most 2,048
+ * characters, with no query or fragment.
  */
 export function pagePath(pathname: string) {
     const [path = ""] = pathname.split(/[?#]/)

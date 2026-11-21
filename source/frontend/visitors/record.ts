@@ -21,9 +21,9 @@ import {
 } from "./describe"
 import { KEEPALIVE_BYTES, queued, takeBatch } from "./queue"
 
-// What happens on the site's pages, as events for the app's server to send
-// on to Infra: a recorder for the page's life, which browser.ts feeds what
-// the browser tells it. It keeps nothing on the device, only in the page's
+// What happens on the site's pages, as events for the app's server to
+// keep: a recorder for the page's life, which browser.ts feeds what the
+// browser tells it. It keeps nothing on the device, only in the page's
 // memory, and touches no page itself, only the clock and the senders it's
 // handed, so the tests run it in Node. Who the visitor is, the server says
 // (backend/visits/). README.md here has what's recorded.

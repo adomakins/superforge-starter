@@ -4,9 +4,9 @@ import { listen, sendBatch, sendConsent, type VisitorsRouter } from "./browser"
 import { type Recorder, recorder } from "./record"
 
 // What visitors view, click and run into on the site's pages, sent to the
-// app's own /api/visits, whose server sends them on to Superforge Infra for
-// the owner's dashboard and Claude. README.md here has what's recorded,
-// what never is, and how a visitor is remembered and asked. Nothing is kept
+// app's own /api/visits, whose server keeps them in the app's own database
+// (backend/visits/). README.md here has what's recorded, what never is,
+// and how a visitor is remembered and asked. Nothing is kept
 // on the device by this script, and everything here does nothing in the
 // prerender, so a page can call it anywhere.
 
@@ -43,7 +43,8 @@ export function startVisitors(router: VisitorsRouter): () => void {
  * Records the app's own event, like `track("booked-a-call", { plan:
  * "monthly" })`: its name in lowercase words joined by hyphens, and at
  * most 32 flat properties. What must count even when the page can't send
- * it, like a payment, the server sends (backend/infra/).
+ * it, like a payment, the server records itself (`recordEvents` in
+ * backend/visits/record.ts).
  */
 export function track(name: string, properties: EventProperties = {}) {
     visitors()?.track(name, properties)

@@ -1,5 +1,14 @@
+import { z } from "zod"
 import type { ObjectStore } from "."
-import type { Files } from "./kind"
+import { Files, json } from "./kind"
+
+/** Today's salt, as the bucket keeps it (`Storage.visitor_salt`). */
+export const visitor_salt = z.object({
+    // The UTC day it's for, like `2026-11-21`
+    day: z.iso.date(),
+    salt: z.string().min(1)
+})
+export type VisitorSalt = z.infer<typeof visitor_salt>
 
 /**
  * Every kind of file the app keeps, each a folder in the `Storage` bucket,
@@ -9,11 +18,12 @@ import type { Files } from "./kind"
  * so every file is filed under a key its kind checks, at the path its kind
  * makes, holding what its kind says (./kind.ts).
  *
- * There are no kinds yet. A kind is a getter here, named for its folder,
- * and listed in `kinds`, and the first one starts like this:
+ * A kind is a getter here, named for its folder, and listed in `kinds`.
+ * The template's one, `visitor_salt`, is a single file of the server's
+ * own; a kind of the business's, with a file for each of something,
+ * starts like this:
  *
- *   import { z } from "zod"
- *   import { bytes, Files } from "./kind"
+ *   import { bytes } from "./kind"
  *
  *   get invoices() {
  *       return new Files(this.store, {
@@ -50,6 +60,30 @@ export class Storage {
      * that no kind here claims is one nothing in the code writes.
      */
     get kinds(): Files<unknown, unknown>[] {
-        return []
+        return [this.visitor_salt]
+    }
+
+    /**
+     * Today's salt, which a visitor the site doesn't remember is hashed
+     * with, so they count as one visitor that day
+     * (backend/visits/visitors.ts): one file, replaced by the next day's,
+     * so no hash can be made again once its day is over. It's here rather
+     * than in Postgres, whose point-in-time recovery would keep a deleted
+     * row for weeks.
+     */
+    get visitor_salt() {
+        return new Files(this.store, {
+            folder: "visitor-salt",
+            shown: {
+                name: "Visitor salt",
+                about: "Today's salt, which counts visitors the site doesn't remember, a day at a time.",
+                access: "locked",
+                why: "The server replaces it each day, and changing it would count today's visitors again."
+            },
+            // One file, so its key says nothing
+            key: z.object({}),
+            path: () => "today.json",
+            content: json(visitor_salt)
+        })
     }
 }

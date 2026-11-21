@@ -2,6 +2,7 @@ import { tellTeamOfSignUp } from "@/backend/users/workflows"
 import { enqueueFromScript } from "@/backend/workflows/engine"
 import { connect, type Database } from "@/database"
 import { localDatabaseUrl } from "@/database/local"
+import { seedAnalyticsEvents, seedAnalyticsVisits } from "./analytics"
 import { seedSessions, seedUsers, signedUp } from "./users"
 
 /**
@@ -37,7 +38,12 @@ export type Seeder = (
 ) => Promise<{ table: string; rows: number }>
 
 // In the order they run: a table after the ones its rows point at
-const SEEDERS: Seeder[] = [seedUsers, seedSessions]
+const SEEDERS: Seeder[] = [
+    seedUsers,
+    seedSessions,
+    seedAnalyticsVisits,
+    seedAnalyticsEvents
+]
 
 /**
  * The tables that get no sample rows, each with why, by its name as a

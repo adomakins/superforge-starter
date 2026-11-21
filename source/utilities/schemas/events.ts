@@ -1,15 +1,17 @@
 import { z } from "zod"
 
-// An event's fields, as Superforge Infra checks them: what the pages send
-// the app's own /api/visits (frontend/visitors/, backend/visits/) and what
-// the server sends (backend/infra/), each checked here the same as Infra
-// will, so a wrong one is caught in the app rather than refused by Infra.
-// backend/infra/README.md, "Events", has the calls.
+// An event's fields: what the pages send the app's own /api/visits
+// (frontend/visitors/) and what the server records itself, each checked
+// here before it's kept (backend/visits/, whose README has the rules).
 
-/** How many events one call carries at most, as Infra takes them. */
+/** How many events one batch from a page carries at most. */
 export const EVENTS_A_CALL = 100
 
-/** How big one call's body can be, in bytes, as Infra takes it. */
+/**
+ * How big one batch's body can be, in bytes: what a page can send as it
+ * closes (`fetch` with `keepalive` takes 64 KB at most, for all a page's
+ * calls in flight).
+ */
 export const EVENTS_BODY_LIMIT = 64 * 1024
 
 /**
@@ -43,8 +45,9 @@ export type EventProperties = z.infer<typeof event_properties>
 export const browser_id = z.string().regex(/^[\w-]{8,64}$/)
 
 /**
- * The app's own ID for whoever is signed in, at most 128 characters. Never
- * an email: Infra keeps no app's users.
+ * The app's own ID for whoever is signed in, as Superforge Infra takes one
+ * with a comment (backend/infra/comments.ts): at most 128 characters, and
+ * never an email, since Infra keeps no app's users.
  */
 export const app_user_id = z
     .string()

@@ -9,12 +9,7 @@ import type {
 } from "./agents"
 import type {
     comment_refused,
-    events_refused,
     kept_comment,
-    queried,
-    query_refused,
-    sent_events,
-    sent_visit,
     start_refused,
     started_sign_in,
     verified_sign_in,
@@ -22,19 +17,15 @@ import type {
 } from "./answers"
 import { chooseInfra } from "./choose"
 import type { FiledComment } from "./comments"
-import type { ServerEvent } from "./events"
-import type { QueryRequest } from "./query"
-import type { Visit } from "./visits"
 
 // Superforge Infra, the backend services this app runs on, through the one
 // wrapper every route and step calls: never a bare `fetch` to it anywhere
 // else (workbench/writing-code.md, "A call to an outside service"). For now
 // it's sign-in, where Infra emails a visitor a code and a link, and says
-// whether what they brought back is right; events, what happened in the
-// app, for the owner's dashboard: the pages' and the server's; SQL over
-// those events, for the app's own dashboards; and comments, what the app's
-// people said about it from the toolbar. The app keeps its own users and
-// sessions (backend/auth/). README.md here has the calls.
+// whether what they brought back is right; comments, what the app's people
+// said about it from the toolbar; and Claude's sign-in to the app's MCP.
+// The app keeps its own users and sessions (backend/auth/), and its own
+// analytics (backend/visits/). README.md here has the calls.
 
 /** What the app asks of Infra, whichever answers: the real one or the stand-in. */
 export type Infra = {
@@ -59,27 +50,6 @@ export type Infra = {
         VerifyRefused | InfraUnavailable
     >
     /**
-     * Tells Infra what happened in the app that only the server knows, like
-     * a sign-up or a payment: at most 100 events (events.ts). Answers how
-     * many Infra kept, none with a test key. A caller sends it without
-     * waiting on it where a person is waiting, and logs a failure: an event
-     * is never worth failing a request over.
-     */
-    sendEvents(
-        events: ServerEvent[]
-    ): AsyncOperation<SentEvents, EventsRefused | InfraUnavailable>
-    /**
-     * Sends Infra a batch of one visitor's page events, which their page
-     * posted to the app's own /api/visits, with who they are, what they
-     * agreed to and where they are (visits.ts). Infra decides by the app's
-     * mode, their answer and their country whether the app remembers them
-     * and whether the page asks them, and answers both. It's never retried:
-     * events sent twice are kept twice.
-     */
-    sendVisit(
-        visit: Visit
-    ): AsyncOperation<SentVisit, EventsRefused | InfraUnavailable>
-    /**
      * Sends Infra a comment someone signed in wrote about an element of a
      * page, which the toolbar posted to the app's own /api/comments, with
      * who they are (comments.ts). Infra keeps it, a test key's too, and
@@ -89,15 +59,6 @@ export type Infra = {
     fileComment(
         comment: FiledComment
     ): AsyncOperation<KeptComment, CommentRefused | InfraUnavailable>
-    /**
-     * Runs the app's own SQL over the project's events from its last
-     * `days` days (query.ts), each query by its name, over one read of
-     * them: each one's rows, or why it has none. A test key reads the
-     * project's real events, and the stand-in reads none.
-     */
-    query(
-        request: QueryRequest
-    ): AsyncOperation<Queried, QueryRefused | InfraUnavailable>
 
     // Claude signing in to the app's MCP, Infra being the OAuth server
     // (agents.ts, and Infra's README, "Claude")
@@ -148,23 +109,11 @@ export type Infra = {
 export type StartedSignIn = z.output<typeof started_sign_in>
 export type StartRefused = z.output<typeof start_refused>
 export type VerifyRefused = z.output<typeof verify_refused>
-export type SentEvents = z.output<typeof sent_events>
-export type SentVisit = z.output<typeof sent_visit>
-export type EventsRefused = z.output<typeof events_refused>
 export type KeptComment = z.output<typeof kept_comment>
 export type CommentRefused = z.output<typeof comment_refused>
-export type Queried = z.output<typeof queried>
-export type QueryRefused = z.output<typeof query_refused>
 export type AgentRequest = z.output<typeof agent_request>["request"]
 export type AgentRefused = z.output<typeof agent_refused>
-export type {
-    AgentConnection,
-    AgentToken,
-    FiledComment,
-    QueryRequest,
-    ServerEvent,
-    Visit
-}
+export type { AgentConnection, AgentToken, FiledComment }
 
 /**
  * Infra couldn't be asked: no key in a build, a key it refused, or an

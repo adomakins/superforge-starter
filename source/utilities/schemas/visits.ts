@@ -8,7 +8,12 @@ import {
 
 // What the pages' script (frontend/visitors/) posts to the app's own
 // /api/visits (backend/visits/), which checks it with the same schemas
-// before it sends it on to Infra with who the visitor is.
+// before it keeps it with who the visitor is.
+
+// A moment by a browser's clock, in milliseconds since 1970, up to the
+// latest a Date can hold, so correcting it for the clock never makes one
+// that isn't a date
+const browser_time = z.number().int().nonnegative().max(8.64e15)
 
 /**
  * An event as a page sends it: `at` in milliseconds by the browser's
@@ -16,7 +21,7 @@ import {
  */
 export const page_event = z.object({
     name: event_name,
-    at: z.number().int().nonnegative(),
+    at: browser_time,
     path: page_path,
     properties: event_properties
 })
@@ -24,11 +29,11 @@ export type PageEvent = z.infer<typeof page_event>
 
 /**
  * What one call to /api/visits carries: when the page sent it, by the
- * browser's clock, which tells Infra how far that clock is off, and one to
- * 100 events.
+ * browser's clock, which tells the server how far that clock is off, and
+ * one to 100 events.
  */
 export const page_batch = z.object({
-    sent_at: z.number().int().nonnegative(),
+    sent_at: browser_time,
     events: z.array(page_event).min(1).max(EVENTS_A_CALL)
 })
 export type PageBatch = z.infer<typeof page_batch>

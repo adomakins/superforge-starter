@@ -6,16 +6,12 @@ import {
     SignJWT
 } from "jose"
 import { randomToken } from "@/backend/auth/tokens"
-import { DAY, MINUTE } from "@/utilities/primitives/durations"
+import { MINUTE } from "@/utilities/primitives/durations"
 import type { AgentScope } from "@/utilities/schemas/agents"
 import { COMMENT_BODY_LIMIT } from "@/utilities/schemas/comments"
-import { EVENTS_BODY_LIMIT } from "@/utilities/schemas/events"
-import type { VisitorMode } from "@/utilities/visitors"
 import { checkToken } from "./agents"
 import { filed_comment } from "./comments"
-import { eventsBody, server_events } from "./events"
 import type { Infra } from "./index"
-import { type VisitConsent, visit } from "./visits"
 
 // How Infra treats a code: it works for 15 minutes and five tries, and a
 // new one for the same address replaces it, link and all
@@ -36,20 +32,15 @@ export type WaitingSignIn = {
  * with no key and no network. Starting a sign-in sends nothing and answers
  * the code and the link, and verifying checks them as Infra does: each
  * works once, for 15 minutes, and a code for five tries. No limits apply,
- * as none do to a test key. Events are checked as Infra checks them, and
- * none is kept; a page's are answered by the app's mode as Infra answers
- * them for a visitor it can't place (`treatment`). A comment is checked
- * too, and answered an ID, though nothing keeps it, where Infra keeps a
- * test key's. Every query answers no rows, since there are no events to
- * read, where a test key reads the project's real ones. The tests always
- * use it, so they never reach Infra, and so does a dev server with no test
- * key (choose.ts). A build never does: anyone could sign in as anyone,
- * since the page shows the code.
+ * as none do to a test key. A comment is checked as Infra checks it, and
+ * answered an ID, though nothing keeps it, where Infra keeps a test key's.
+ * The tests always use it, so they never reach Infra, and so does a dev
+ * server with no test key (choose.ts). A build never does: anyone could
+ * sign in as anyone, since the page shows the code.
  *
  * `waiting` is where it keeps what it sent, by address: its own, or one
  * that outlives a dev server's reloads. With `logs`, as a dev server has
- * it, each batch of a page's events is logged, and each comment, since
- * nothing keeps them, and each call of queries, which need a test key.
+ * it, each comment is logged, since nothing keeps it.
  */
 export function standInInfra({
     waiting = new Map(),
@@ -124,62 +115,6 @@ export function standInInfra({
             }
         },
 
-        async sendEvents(events) {
-            const body = JSON.stringify(eventsBody(events))
-            if (new TextEncoder().encode(body).byteLength > EVENTS_BODY_LIMIT) {
-                return {
-                    ok: false,
-                    error: { reason: "too-large", limit: EVENTS_BODY_LIMIT }
-                }
-            }
-            const checked = server_events.safeParse(events)
-            if (checked.success) {
-                return { ok: true, data: { kept: 0 } }
-            } else {
-                // The fields that failed, as Infra names them
-                const fields = checked.error.issues.map((issue) =>
-                    ["events", ...issue.path].join(".")
-                )
-                return { ok: false, error: { reason: "invalid", fields } }
-            }
-        },
-
-        async sendVisit(sent) {
-            const body = JSON.stringify(sent)
-            if (new TextEncoder().encode(body).byteLength > EVENTS_BODY_LIMIT) {
-                return {
-                    ok: false,
-                    error: { reason: "too-large", limit: EVENTS_BODY_LIMIT }
-                }
-            }
-            const checked = visit.safeParse(sent)
-            if (!checked.success) {
-                // The fields that failed, as Infra names them
-                const fields = checked.error.issues.map((issue) =>
-                    issue.path.join(".")
-                )
-                return { ok: false, error: { reason: "invalid", fields } }
-            }
-            const { mode, visitor, events } = checked.data
-            const { remembered, ask } = treatment(mode, visitor.consent)
-            if (logs) {
-                // The events on their own, so a terminal shows each one's
-                // properties rather than [Object]
-                console.info(
-                    "Infra's stand-in: a page's events, which Infra would keep, and which nothing keeps here",
-                    {
-                        mode,
-                        consent: visitor.consent,
-                        user: visitor.user,
-                        remembered,
-                        ask
-                    },
-                    events
-                )
-            }
-            return { ok: true, data: { kept: 0, remembered, ask } }
-        },
-
         async fileComment(comment) {
             const body = JSON.stringify(comment)
             if (
@@ -207,42 +142,6 @@ export function standInInfra({
             return {
                 ok: true,
                 data: { id: crypto.randomUUID(), created_at: new Date() }
-            }
-        },
-
-        // The stand-in keeps no events and runs no SQL, so every query
-        // answers no rows: a dev server shows the project's real ones with
-        // a test key (choose.ts)
-        async query({ queries, days, time_zone }) {
-            if (logs) {
-                console.info(
-                    "Infra's stand-in runs no SQL, so every query answers no rows. Set INFRA_TEST_KEY to read the project's events.",
-                    { queries: Object.keys(queries) }
-                )
-            }
-            return {
-                ok: true,
-                data: {
-                    window: {
-                        since: new Date(Date.now() - days * DAY),
-                        days,
-                        time_zone,
-                        events: 0
-                    },
-                    results: Object.fromEntries(
-                        Object.keys(queries).map((name) => [
-                            name,
-                            {
-                                ok: true as const,
-                                data: {
-                                    columns: [],
-                                    rows: [],
-                                    truncated: false
-                                }
-                            }
-                        ])
-                    )
-                }
             }
         },
 
@@ -338,23 +237,6 @@ export async function standInAgentToken({
         .setIssuedAt()
         .setExpirationTime(expires_in)
         .sign(signing)
-}
-
-/**
- * Whether Infra remembers a visitor, and whether their page asks them, by
- * the app's mode and what they answered, as README.md's table has it, for a
- * visitor whose country is unknown, as every one's is here: so
- * `ask-in-eu` treats them as `ask` does.
- */
-function treatment(mode: VisitorMode, consent: VisitConsent) {
-    if (mode === "remember") {
-        return { remembered: consent !== "declined", ask: false }
-    } else if (mode === "ask" || mode === "ask-in-eu") {
-        return { remembered: consent === "given", ask: consent === "unasked" }
-    } else {
-        // `never`
-        return { remembered: false, ask: false }
-    }
 }
 
 /**

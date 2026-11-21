@@ -4,8 +4,8 @@ import type { Recorder, Send, SendConsent } from "./record"
 
 // The recorder (record.ts) wired to the page and the router: the router's
 // pages, the scrolling, the page hiding and coming back, the clicks and the
-// errors, and the calls to the app's own /api/visits, which sends them on
-// to Infra (backend/visits/). Only ever runs in a browser, from index.ts's
+// errors, and the calls to the app's own /api/visits, which keeps them
+// (backend/visits/). Only ever runs in a browser, from index.ts's
 // `startVisitors`, which an effect calls, so never in the prerender.
 
 /** The router, as far as the script needs it: when it's resolved a page. */
@@ -24,8 +24,8 @@ export const FIELDS = "input, textarea, select, [contenteditable]"
 
 /**
  * Sends a batch to the app's own /api/visits, as JSON, with the site's
- * cookies, as any call to its API goes: never to Infra, and never with
- * `navigator.sendBeacon`, which ad blockers refuse.
+ * cookies, as any call to its API goes: never to another site, and never
+ * with `navigator.sendBeacon`, which ad blockers refuse.
  */
 export const sendBatch: Send = async (batch, keepalive) => {
     try {

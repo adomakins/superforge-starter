@@ -1,9 +1,11 @@
 import { Hono } from "hono"
+import type { Database } from "@/database"
 import { sign_in_start, sign_in_verify } from "@/utilities/schemas/auth"
 import type { ApiEnvironment } from "../context"
 import { failure, validated } from "../failures"
-import type { Infra } from "../infra"
 import { tellTeamOfSignUp } from "../users/workflows"
+import { keptVisitorId } from "../visits/cookies"
+import { recordEvents } from "../visits/record"
 import { endSession } from "./sessions"
 import { maySignIn, signIn } from "./sign-in"
 import {
@@ -125,7 +127,10 @@ export const authRoutes = new Hono<ApiEnvironment>()
                 console.info("Signed in", { user_id: user.id, joined })
                 if (joined) {
                     await tellTeam(context.var.workflows, user)
-                    tellInfraOfSignUp(context.var.infra, user.id)
+                    await recordSignUp(context.var.database, {
+                        user_id: user.id,
+                        visitor_id: keptVisitorId(context) ?? undefined
+                    })
                 }
                 return context.json({ user }, 200)
             }
@@ -191,26 +196,21 @@ async function tellTeam(
     }
 }
 
-// Tells Infra someone new has signed up, as a `signed-up` event with their
-// user's ID, never their email, for the owner's dashboard and Claude
-// (backend/infra/README.md, "Events"). It's sent without waiting on it, so
-// a slow or failing Infra never holds up signing in: a failure is logged,
-// and the event is lost.
-function tellInfraOfSignUp(infra: Infra, user_id: string) {
-    infra
-        .sendEvents([{ name: "signed-up", user: user_id }])
-        .then((sent) => {
-            if (!sent.ok) {
-                console.warn("The sign-up's event didn't reach Infra", {
-                    user_id,
-                    reason: sent.error.reason
-                })
-            }
+// Records that someone new has signed up, as a `signed-up` event with their
+// user's ID, and their browser's when the site remembers it, which joins
+// the sign-up to the visits that led to it (backend/visits/README.md). One
+// that fails is logged and leaves them signed in: an event is never worth
+// failing a request over.
+async function recordSignUp(
+    database: Database,
+    who: { user_id: string; visitor_id: string | undefined }
+) {
+    try {
+        await recordEvents(database, [{ name: "signed-up", ...who }])
+    } catch (error) {
+        console.error("The sign-up's event wasn't recorded", {
+            user_id: who.user_id,
+            error
         })
-        .catch((error: unknown) => {
-            console.error("Sending the sign-up's event threw", {
-                user_id,
-                error
-            })
-        })
+    }
 }
