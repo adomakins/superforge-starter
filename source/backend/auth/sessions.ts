@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, like, lt, ne, sql } from "drizzle-orm"
+import { and, desc, eq, gt, inArray, like, lt, ne, sql } from "drizzle-orm"
 import type { Database } from "@/database"
 import { sessions, users } from "@/database/schema"
 import { fromNow, now } from "@/database/time"
@@ -204,4 +204,30 @@ export async function endOtherSessions(
         )
         .returning({ token_hash: sessions.token_hash })
     return ended.length
+}
+
+/**
+ * How many sessions have run out: rows no request accepts any more, which
+ * the `prune-sessions` job deletes (jobs.ts)
+ */
+export async function countExpiredSessions(database: Database) {
+    const [counted] = await database
+        .select({ expired: sql<number>`count(*)::integer` })
+        .from(sessions)
+        .where(lt(sessions.expires_at, now))
+    return counted?.expired ?? 0
+}
+
+/** Deletes up to `limit` sessions that have run out, and answers how many */
+export async function deleteExpiredSessions(database: Database, limit: number) {
+    const expired = database
+        .select({ token_hash: sessions.token_hash })
+        .from(sessions)
+        .where(lt(sessions.expires_at, now))
+        .limit(limit)
+    const deleted = await database
+        .delete(sessions)
+        .where(inArray(sessions.token_hash, expired))
+        .returning({ token_hash: sessions.token_hash })
+    return deleted.length
 }

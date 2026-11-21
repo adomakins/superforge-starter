@@ -1,3 +1,4 @@
+import { JOBS } from "@/backend/jobs"
 import { tellTeamOfSignUp } from "@/backend/users/workflows"
 import type { Workflow } from "./define"
 import type { Runner } from "./runners"
@@ -15,7 +16,11 @@ import type { Runner } from "./runners"
  * One that has shipped stays listed until no run of it is left (README.md,
  * "Changing a workflow").
  */
-export const WORKFLOWS: Workflow[] = [tellTeamOfSignUp]
+export const WORKFLOWS: Workflow[] = [
+    tellTeamOfSignUp,
+    // Each job's, which makes its change (backend/jobs/)
+    ...JOBS.map((job) => job.workflow)
+]
 
 /**
  * Every runner there is (runners.ts): what checks for something due, every

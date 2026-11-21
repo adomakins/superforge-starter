@@ -52,6 +52,9 @@ stand-in can't sign Claude in.
 | `list_routes` | Every route under `/api`: its method and path                                           |
 | `call_api`    | Calls one, as the person, with a query and a JSON body, and answers its status and JSON |
 
-So every route a feature adds is a tool already. A feature that wants a
+So every route a feature adds is a tool already. Changing many rows at
+once goes through a job (`backend/jobs/`): `GET /api/jobs`, then a dry
+run with `POST /api/jobs/:name`, and the run itself once the person says
+so, which the MCP's instructions tell Claude. A feature that wants a
 tool of its own, with a name and a description Claude reads first, adds
 it in `index.ts`'s `registerTools`, calling its route the same way.
