@@ -47,7 +47,7 @@ A patch release (`0.1.1`) fixes something; a minor release (`0.2.0`) adds
 or changes something. Until `1.0.0`, a minor release may also change how
 something already there works, which its notes flag.
 
-## Unreleased
+## 0.5.0 (2026-11-21)
 
 Claude, connected to the app: the app has an MCP of its own at `/mcp`,
 and Claude signs in to it as one of the business's own people, who
