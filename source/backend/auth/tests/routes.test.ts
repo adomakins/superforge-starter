@@ -191,6 +191,7 @@ function refusing(
     }
 ): Infra {
     return {
+        ...standInInfra(),
         startSignIn: async () => start,
         verifySignIn: async () => verify,
         sendEvents: async () => ({ ok: true, data: { kept: 0 } }),
@@ -458,6 +459,7 @@ test("when only listed people may sign in, anyone else is refused before Infra i
             ]
         },
         infra: {
+            ...stand_in,
             startSignIn: async (request) => {
                 asked.push(request.email)
                 return await stand_in.startSignIn(request)

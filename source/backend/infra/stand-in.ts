@@ -1,8 +1,17 @@
+import {
+    createLocalJWKSet,
+    exportJWK,
+    generateKeyPair,
+    type JWTVerifyGetKey,
+    SignJWT
+} from "jose"
 import { randomToken } from "@/backend/auth/tokens"
 import { DAY, MINUTE } from "@/utilities/primitives/durations"
+import type { AgentScope } from "@/utilities/schemas/agents"
 import { COMMENT_BODY_LIMIT } from "@/utilities/schemas/comments"
 import { EVENTS_BODY_LIMIT } from "@/utilities/schemas/events"
 import type { VisitorMode } from "@/utilities/visitors"
+import { checkToken } from "./agents"
 import { filed_comment } from "./comments"
 import { eventsBody, server_events } from "./events"
 import type { Infra } from "./index"
@@ -235,8 +244,100 @@ export function standInInfra({
                     )
                 }
             }
+        },
+
+        // Claude's sign-in needs Infra: the stand-in signs nobody in, and
+        // only checks the tokens a test mints with `standInAgentToken`
+        async passOAuth() {
+            if (logs) {
+                console.info(
+                    "Infra's stand-in can't sign Claude in. Set INFRA_TEST_KEY to connect Claude to a dev server."
+                )
+            }
+            return Response.json(
+                {
+                    error: "temporarily_unavailable",
+                    error_description:
+                        "This dev server has no Infra test key, so Claude can't sign in to it"
+                },
+                { status: 503, headers: { "Cache-Control": "no-store" } }
+            )
+        },
+        async agentRequest() {
+            return { ok: false, error: { error: "not-found" } }
+        },
+        async allowAgent() {
+            return { ok: false, error: { error: "not-found" } }
+        },
+        async denyAgent() {
+            return { ok: false, error: { error: "not-found" } }
+        },
+        async agentConnections() {
+            return { ok: true, data: [] }
+        },
+        async endAgentConnection() {
+            return { ok: false, error: { error: "not-found" } }
+        },
+        async endAgentConnections() {
+            return { ok: true, data: 0 }
+        },
+        async checkAgentToken(token, origin) {
+            const { public_keys } = await standInKeys()
+            return await checkToken(public_keys, token, {
+                origin,
+                project: STAND_IN_PROJECT,
+                mode: "test"
+            })
         }
     }
+}
+
+// The project the stand-in's tokens are for
+const STAND_IN_PROJECT = "sf_project_stand_in"
+
+let keys: Promise<{ signing: CryptoKey; public_keys: JWTVerifyGetKey }>
+
+// A key pair of the stand-in's own, made the first time it's needed
+function standInKeys() {
+    keys ??= generateKeyPair("ES256").then(async (pair) => ({
+        signing: pair.privateKey,
+        public_keys: createLocalJWKSet({
+            keys: [{ ...(await exportJWK(pair.publicKey)), kid: "stand-in" }]
+        })
+    }))
+    return keys
+}
+
+/**
+ * A token as Infra signs one, for a test to call the API as Claude does:
+ * acting as `email`, with `scopes`, for the app at `origin` (the tests'
+ * own is `http://localhost`), which the stand-in's `checkAgentToken` takes
+ */
+export async function standInAgentToken({
+    email,
+    scopes = ["read", "act"],
+    origin = "http://localhost",
+    expires_in = "10m"
+}: {
+    email: string
+    scopes?: AgentScope[]
+    origin?: string
+    expires_in?: string
+}) {
+    const { signing } = await standInKeys()
+    return await new SignJWT({
+        scope: scopes.join(" "),
+        project: STAND_IN_PROJECT,
+        mode: "test",
+        connection: crypto.randomUUID()
+    })
+        .setProtectedHeader({ alg: "ES256", kid: "stand-in", typ: "at+jwt" })
+        .setIssuer(origin)
+        .setAudience(`${origin}/mcp`)
+        .setSubject(email)
+        .setIssuedAt()
+        .setExpirationTime(expires_in)
+        .sign(signing)
 }
 
 /**

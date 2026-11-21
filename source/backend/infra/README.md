@@ -253,6 +253,37 @@ since Infra gives each query up to ten seconds.
 | 413 `too-many-events`, the `most` a call reads    | `too-many-events`, logged: fewer `days` |
 | 401 (a key it refused), anything else, or nothing | `unavailable`, logged                   |
 
+## Claude: `passOAuth`, `checkAgentToken` and the connections
+
+Claude connects to the app's own MCP (`backend/mcp/`) as one of the
+business's own people. **Infra is the OAuth server, and the app only
+checks the tokens it signs**: Infra's README, "Claude", has the flow.
+
+- **`passOAuth`** passes Claude's OAuth calls through, as they are, to
+  Infra's `/v1/oauth/…`, with the key and the app's origin
+  (`App-Origin`), and answers Infra's answer as it is: its status, its
+  body, and where it sends the browser. `backend/agents/oauth.ts` calls it
+  for `/.well-known/oauth-authorization-server` and `/oauth/*`. So the
+  app's own domain is the issuer Claude sees, and its key never leaves
+  the server.
+- **`checkAgentToken`** checks a token Claude brings with Infra's public
+  keys (`/.well-known/jwks.json` on Infra's host, fetched once and again
+  for a key it doesn't have), never asking Infra: signed by Infra, for
+  this origin and its `/mcp`, for this project in the key's mode (which
+  `GET /v1/project` says, asked once), and not run out. It answers whose
+  address it is and what they allowed. `backend/auth/agents.ts` then
+  decides whether that person is still one of the business's own.
+- **`agentRequest`, `allowAgent` and `denyAgent`** are the Allow page's:
+  what Claude asked for, and telling Infra who allowed or declined it,
+  which answers where the browser goes back to Claude.
+- **`agentConnections`, `endAgentConnection` and `endAgentConnections`**
+  are someone's Connected list, and ending one, or all of theirs.
+
+A token is bound to where it was made: an app's origin, and its project
+in a mode. A test key's tokens are only ever for this computer, so a dev
+server connects Claude with a test key; the stand-in signs nobody in,
+and checks only what `standInAgentToken` mints, for the tests.
+
 ## Keys
 
 Each copy of this codebase is a **project** on Infra, made on
@@ -295,6 +326,9 @@ both at once; without it, the server calls the real one (`INFRA_URL` in
 
 - `index.ts`: `Infra`, what the app asks of it, its results, and
   `appInfra()`, the server's.
+- `agents.ts`: Claude's sign-in: where a request reached the app
+  (`requestOrigin`), passing an OAuth call through, what Infra answers
+  about requests and connections, and checking a token with `jose`.
 - `answers.ts`: what Infra answers, as zod schemas, which `index.ts`'s
   types come from.
 - `events.ts`: an event from the server, checked as Infra checks it, with

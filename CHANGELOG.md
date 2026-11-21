@@ -49,6 +49,56 @@ something already there works, which its notes flag.
 
 ## Unreleased
 
+Claude, connected to the app: the app has an MCP of its own at `/mcp`,
+and Claude signs in to it as one of the business's own people, who
+allows it with one click on the app's own page. Nobody makes or pastes a
+token. Superforge Infra is the OAuth server, and the app checks the
+tokens Infra signs, with Infra's public keys, never asking Infra.
+
+- **Claude's token in a cookie's place**, machinery:
+  `source/backend/auth/signed-in.ts` takes `Authorization: Bearer <token>`
+  as a session, through `auth/agents.ts`, which has Infra check the token
+  (`checkAgentToken`, new on the Infra wrapper) and finds its person,
+  who must be one of the business's own, on every request.
+  `context.var.signed_in_with` says `session` or `agent`, and
+  `context.var.scopes` what it may do: a token with only `read` makes
+  `GET` requests alone (403 `read-only`). A new `inBrowser` middleware
+  keeps who can sign in, where someone's signed in, and Claude's own
+  connections from any token (403 `browser-only`). It's on
+  `/api/account/sessions*` and on adding, changing and removing users in
+  `users/routes.ts`; a copy's own routes that change who signs in add it
+  too. How to tell a copy already has it: `auth/agents.ts` exists.
+- **Where Claude signs in**, machinery: `source/backend/agents/oauth.ts`
+  answers `/.well-known/oauth-protected-resource` (and the same with
+  `/mcp` after it), and passes `/.well-known/oauth-authorization-server`
+  and `/oauth/authorize`, `/token`, `/register` and `/revoke` through to
+  Infra with the key and the app's origin (`passOAuth`, in
+  `infra/agents.ts`). `source/server.ts` routes them, and `/mcp`.
+- **The Allow page and the Connected list**, a starting point for their
+  look: `source/frontend/routes/connect.$request_id.tsx`, drawn in the
+  browser and left out of the prerender (`vite.config.ts`), and the
+  Claude section on the account page
+  (`components/dashboard/connections.tsx`), for the business's own. Their
+  routes are `source/backend/agents/routes.ts`: `/api/connect/:request_id`
+  (with `/allow` and `/deny`) and `/api/account/connections`.
+- **The app's MCP**, machinery: `source/backend/mcp/`, MCP's Streamable
+  HTTP without sessions, with two tools: `list_routes`, the API's routes,
+  and `call_api`, which calls one in this process with Claude's token,
+  so Claude can do what its person can through the API, and nothing
+  else. Its README has how Claude connects.
+- **The Infra wrapper** gains `passOAuth`, `agentRequest`, `allowAgent`,
+  `denyAgent`, `agentConnections`, `endAgentConnection`,
+  `endAgentConnections` and `checkAgentToken` (`index.ts`, `client.ts`,
+  `agents.ts`, `stand-in.ts`, `choose.ts`). The stand-in signs nobody in,
+  and checks only the tokens a test mints with `standInAgentToken`: a dev
+  server connects Claude with a test key. The tests' own Infras
+  (`auth/tests/`, `visits/tests/`) now start from the stand-in's
+  (`...standInInfra()`), which a copy's own test Infras need too.
+- **Packages**: `jose` (6.2.15), which checks the tokens, and
+  `@modelcontextprotocol/sdk` (1.32.2), the MCP.
+- **Owner**: nothing to set. Claude connects once Infra signs tokens, and
+  the app's Infra project lists the domain Claude connects on.
+
 The toolbar: whoever's signed in spots something that should change,
 clicks it and says what, and the comment goes to Superforge Infra, for
 the AI that builds the app to work through later.

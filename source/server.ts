@@ -1,5 +1,7 @@
 import start, { createServerEntry } from "@tanstack/react-start/server-entry"
 import { api } from "./backend"
+import { oauth } from "./backend/agents/oauth"
+import { mcp } from "./backend/mcp"
 import { syncAppInternalUsers } from "./backend/users/sync"
 import { startWorkflows } from "./backend/workflows/engine"
 
@@ -20,13 +22,22 @@ if (import.meta.env.DEV) {
 
 // The client build's files, every prerendered page among them, never reach
 // this: the Node server answers them first (source/node.ts), and so does
-// Vite's dev server. So this sees /api, and anything that isn't a page (a
+// Vite's dev server. So this sees /api, the app's own MCP (/mcp,
+// backend/mcp/) and where Claude signs in to it (/.well-known/oauth-* and
+// /oauth/*, backend/agents/oauth.ts), and anything that isn't a page (a
 // 404).
 export default createServerEntry({
     fetch(request) {
         const { pathname } = new URL(request.url)
         if (pathname.startsWith("/api/")) {
             return api.fetch(request)
+        } else if (pathname === "/mcp") {
+            return mcp.fetch(request)
+        } else if (
+            pathname.startsWith("/oauth/") ||
+            pathname.startsWith("/.well-known/oauth-")
+        ) {
+            return oauth.fetch(request)
         } else {
             return start.fetch(request)
         }

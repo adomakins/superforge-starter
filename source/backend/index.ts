@@ -4,6 +4,7 @@ import { appDatabase } from "@/database"
 import { appStorage } from "@/database/storage"
 import { VISITOR_MODE } from "@/utilities/visitors"
 import { accountRoutes } from "./account/routes"
+import { agentRoutes } from "./agents/routes"
 import { ACCESS } from "./auth/access"
 import { authRoutes } from "./auth/routes"
 import { commentRoutes } from "./comments/routes"
@@ -93,6 +94,11 @@ export function apiWith(variables: () => ApiEnvironment["Variables"]) {
             // runs, under /workflows
             .route("/", userRoutes)
             .route("/", workflowRoutes)
+
+            // Claude connecting to the app's MCP: the Allow page, under
+            // /connect, and someone's connections, under
+            // /account/connections (agents/)
+            .route("/", agentRoutes)
     )
 }
 

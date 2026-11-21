@@ -13,6 +13,7 @@ import {
 import { type SessionUser, signOut } from "@/frontend/queries/auth"
 import { failureOf } from "@/frontend/queries/failures"
 import { isInternal, person_name } from "@/utilities/schemas/users"
+import { Connections } from "./connections"
 import { useNow } from "./marks"
 import { sectionHeading, textButton } from "./shell"
 import { describeBrowser, isHandheld, moment, since } from "./words"
@@ -20,13 +21,15 @@ import { describeBrowser, isHandheld, moment, since } from "./words"
 // Someone's own account, whatever their role: a customer's whole dashboard,
 // and one screen of an internal person's. What they're called, the address
 // they sign in with, and the browsers they're signed in on, with signing
-// out of the others.
+// out of the others, and for the business's own, where they've let Claude
+// in (connections.tsx).
 
 export function AccountPanel({ user }: { user: SessionUser }) {
     return (
         <div className="flex flex-col gap-10">
             <DetailsForm user={user} />
             <Sessions />
+            {isInternal(user.role) && <Connections />}
         </div>
     )
 }
