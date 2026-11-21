@@ -291,6 +291,10 @@ curl -sI https://<domain>/ | grep -i -E "x-cache|cache-control|age"
 When you're asked to ship, push the branch and open the PR with
 `gh pr create`:
 
+- **In the template itself** (its `README.md` still has its "This
+  template" section), **read that section's "Releases" first**: a PR that
+  changes what a copy gets is a release, with its version and its notes
+  in the same PR.
 - **Title it with what changed**, by area: `website: the services page`,
   `api: book a call`, `database: customers`.
 - **Put anything the human has to do around the merge in the body**: a

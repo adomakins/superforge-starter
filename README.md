@@ -85,16 +85,24 @@ its own copy runs on Railway, in the `superforge-starter` project, at
 <https://superforge-starter.up.railway.app>. A copy made from it replaces
 this section, and the names above, in `START-HERE.md`'s step 5.
 
-**Releases.** A PR that changes what a copy gets adds its notes under
-`## Unreleased` at the top of `CHANGELOG.md`, written as that file's "How
-a release is written" says. A release is a PR that gives the heading its
-version and day (`## 0.2.0 (2026-12-01)`) and sets `version` in
-`.superforge/superforge.json` to match. Once it merges and passes
+**Releases: every PR that changes what a copy gets is a release of its
+own.** It puts its notes at the top of `CHANGELOG.md`, under the next
+version and the day (`## 0.3.0 (2026-12-01)`), written as that file's "How
+a release is written" says, and sets `version` in
+`.superforge/superforge.json` to match. A fix moves the last number
+(`0.2.1`); anything added or changed moves the middle one (`0.3.0`). A PR
+a copy wouldn't take, like a change to this section or a typo in the
+notes, changes neither and adds no notes. Once a release merges and passes
 `check`, CI tags the merge, `v` and the version (`release-tag` in
-`.github/workflows/ci.yml`). Copies update from the tags, so a release is
-out once CI has tagged it. A version with no heading in `CHANGELOG.md`
-isn't tagged: the job fails and says why. If CI ever misses a release,
-tag the commit that set the version by hand:
+`.github/workflows/ci.yml`), and copies update from the tags. Two PRs open
+side by side: the second to merge rebases on `main` and takes the version
+after the first's. A change a copy has to deploy before another, like a
+table its code stops reading before the table is dropped, goes in two PRs,
+so two releases, each deployed before the next. Notes still under
+`## Unreleased` from before this rule go out with the next release, under
+its heading. A version with no heading in `CHANGELOG.md` isn't tagged: the
+job fails and says why. If CI ever misses a release, tag the commit that
+set the version by hand:
 
 ```bash
 git switch main && git pull
