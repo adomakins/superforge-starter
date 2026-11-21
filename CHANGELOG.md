@@ -228,6 +228,27 @@ Internal users, listed in code: the business's own people are named in
   the seed's internal users are made from. How to tell a copy already
   has it: `internal_users` in `source/backend/auth/access.ts`.
 
+The upgrade test's sample rows, for more of a copy's own checks. A table
+whose check the rows can't meet passes its own PR, then fails `check` on
+every PR after it merges, once the upgrade test's base has it, as
+Skyline's appointments and notes did.
+
+- **The upgrade test fills more kinds of check**, machinery: `fill()`
+  (`source/database/tests/support/fill.ts`) reads the values a text
+  column's check lists from the database's own check (`= ANY
+  (ARRAY[…])`), not only from `schema.ts`'s `text({ enum })`, so a table
+  `schema.ts` has since renamed gets them too, and never takes a
+  pattern's quoted text, like a slug's `~ '^[a-z0-9]+…'`, for a value.
+  Where a check wants exactly one of several columns set
+  (`num_nonnulls(user_id, contact_id) = 1`), or at least one (`>= 1`),
+  each row sets one of them, in turn, and leaves the others null. Where
+  a check wants one column after another (`ends_at > starts_at`), the
+  later one's sample is past every other column's. The template's own
+  tables have none of these checks; a copy's, like an appointment that
+  ends after it starts, or a note about a contact or an appointment, now
+  fill. `source/database/tests/fill.test.ts` tries both on tables of its
+  own. How to tell a copy already has it: `later` in `fill.ts`.
+
 Flags:
 
 - **Owner**: the business's people go in `internal_users`, the owner
