@@ -1,17 +1,18 @@
 import type { Context } from "hono"
 import { z } from "zod"
 
-// What Infra needs to know about a visitor, from their request: who's
-// signing in (auth/routes.ts), and who sent a page's events
-// (visits/routes.ts)
+// What the server reads of a visitor from their request: who's signing in,
+// for Infra (auth/routes.ts), and who sent a page's events, for the app's
+// own analytics (visits/routes.ts)
 
 /** An IPv4 or IPv6 address, as Infra takes one. */
 export const ip_address = z.union([z.ipv4(), z.ipv6()])
 
 /**
  * The visitor's IP address, which Infra's sign-in limits count by, and
- * places a visitor's country by: the `X-Real-IP` header Railway's proxy
- * sets, since the connection's own address is the proxy's. A request
+ * the server places a visitor's country by (visits/location.ts): the
+ * `X-Real-IP` header Railway's proxy sets, since the connection's own
+ * address is the proxy's. A request
  * without it, like one to a dev server or to the build on this computer,
  * counts as this computer's own.
  */
@@ -33,13 +34,14 @@ export function visitorIp(context: Context) {
     }
 }
 
-/** The longest `User-Agent` Infra takes. */
+/** The longest `User-Agent` read: what Infra takes with a comment. */
 const LONGEST_USER_AGENT = 1024
 
 /**
- * The browser, as it describes itself (`User-Agent`), for Infra to tell a
- * bot from a person and a phone from a laptop, which it never keeps: as it
- * came, shortened to what Infra takes, or empty without one.
+ * The browser, as it describes itself (`User-Agent`), which tells a bot
+ * from a person and a phone from a laptop, and is never kept, by the
+ * server (visits/browsers.ts) or by Infra with a comment: as it came,
+ * shortened, or empty without one.
  */
 export function visitorUserAgent(context: Context) {
     return (context.req.header("User-Agent") ?? "")

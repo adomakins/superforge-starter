@@ -125,7 +125,15 @@ export default defineRailway(() => {
             // (source/backend/infra/). The owner makes it on Superforge's
             // dashboard and sets it here in Railway's dashboard, which
             // `preserve()` keeps; until then, sign-in answers that it's down
-            INFRA_SECRET_KEY: preserve()
+            INFRA_SECRET_KEY: preserve(),
+            // Which of DB-IP's free databases places a visitor by their IP
+            // address, for their visit's country
+            // (source/backend/visits/location.ts). The server downloads it
+            // as it first needs it, and again each week: 4 MB, and 9 MB in
+            // memory. `dbip-city-lite` adds the region and the city, for
+            // 120 MB in memory. Without the variable, as in a dev server,
+            // no visitor is placed.
+            LOCATION_DATABASE: "dbip-country-lite"
         }
     })
     // Railway's own address for the app, which the first apply makes with

@@ -1,37 +1,19 @@
 import { expect, test, vi } from "vitest"
-import type { Infra, ServerEvent } from "@/backend/infra"
-import { standInInfra } from "@/backend/infra/stand-in"
 import { testApi } from "@/backend/tests/support/api"
-import { users } from "@/database/schema"
+import { analytics_events, users } from "@/database/schema"
 
-// What signing in tells Infra: a `signed-up` event when a sign-in makes
-// someone new, with their user's ID and never their email, and nothing
-// else. Infra being slow or down never holds signing in up.
+// What signing in records: a `signed-up` event when a sign-in makes someone
+// new, with their user's ID, and their browser's when the site remembers
+// it, and nothing else. An event that can't be recorded never holds
+// signing in up.
 
 const EMAIL = "ada@example.com"
 
-// The stand-in, with what was sent through it, or `sendEvents` in place of
-// its own
-function recordingInfra(sendEvents?: Infra["sendEvents"]) {
-    const sent: ServerEvent[][] = []
-    const stand_in = standInInfra()
-    const infra: Infra = {
-        ...stand_in,
-        startSignIn: (request) => stand_in.startSignIn(request),
-        verifySignIn: (proof) => stand_in.verifySignIn(proof),
-        sendEvents: async (events) => {
-            sent.push(events)
-            return await (sendEvents ?? stand_in.sendEvents)(events)
-        },
-        sendVisit: (visit) => stand_in.sendVisit(visit),
-        fileComment: (comment) => stand_in.fileComment(comment),
-        query: (request) => stand_in.query(request)
-    }
-    return { infra, sent }
-}
+const VISITOR = "2f1c8e64-7b5a-4f2e-9c3d-8a6b1e0f4d27"
 
-// Signs EMAIL in by its code, and answers the verify's response
-async function signIn(api: Awaited<ReturnType<typeof testApi>>) {
+// Signs EMAIL in by its code, from a browser with `cookie`, and answers
+// the verify's response
+async function signIn(api: Awaited<ReturnType<typeof testApi>>, cookie = "") {
     const started = await api.client.api.auth.start.$post({
         json: { email: EMAIL }
     })
@@ -42,46 +24,54 @@ async function signIn(api: Awaited<ReturnType<typeof testApi>>) {
     if (development === null) {
         throw new Error("The stand-in answers the code")
     }
-    return await api.client.api.auth.verify.$post({
-        json: { email: EMAIL, code: development.code }
-    })
+    return await api.client.api.auth.verify.$post(
+        { json: { email: EMAIL, code: development.code } },
+        { headers: { cookie } }
+    )
 }
 
-test("a first sign-in tells Infra someone signed up, by their ID, once", async () => {
+test("a first sign-in records that someone signed up, by their ID and their browser's, once", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {})
-    const { infra, sent } = recordingInfra()
-    const api = await testApi({ infra })
-    await signIn(api)
-    await signIn(api)
+    const api = await testApi()
+    await signIn(api, `visitor=${VISITOR}`)
+    await signIn(api, `visitor=${VISITOR}`)
 
     const [user] = await api.database.select().from(users)
-    expect(sent).toEqual([[{ name: "signed-up", user: user?.id }]])
-    expect(JSON.stringify(sent)).not.toContain(EMAIL)
+    const events = await api.database.select().from(analytics_events)
+    expect(events).toEqual([
+        expect.objectContaining({
+            source: "server",
+            name: "signed-up",
+            user_id: user?.id,
+            visitor_id: VISITOR,
+            visit_id: null,
+            properties: {}
+        })
+    ])
+    expect(JSON.stringify(events)).not.toContain(EMAIL)
 })
 
-test("an Infra that's down still signs someone new in, and says so in the logs", async () => {
+test("a sign-up from a browser the site doesn't remember is recorded without one", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {})
-    const warned = vi.spyOn(console, "warn").mockImplementation(() => {})
-    const { infra } = recordingInfra(async () => ({
-        ok: false,
-        error: { reason: "unavailable" }
-    }))
-    const api = await testApi({ infra })
-    const verified = await signIn(api)
-    expect(verified.status).toBe(200)
-    await vi.waitFor(() => {
-        expect(warned).toHaveBeenCalledWith(
-            "The sign-up's event didn't reach Infra",
-            expect.objectContaining({ reason: "unavailable" })
-        )
-    })
+    const api = await testApi()
+    await signIn(api)
+    await signIn(api, "visitor=not%20an%20id")
+
+    const events = await api.database.select().from(analytics_events)
+    expect(events.map((event) => event.visitor_id)).toEqual([null])
 })
 
-test("an Infra that never answers doesn't hold up the sign-in", async () => {
+test("a sign-up whose event can't be recorded still signs them in, and says so in the logs", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {})
-    const { infra, sent } = recordingInfra(() => new Promise(() => {}))
-    const api = await testApi({ infra })
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+    const api = await testApi()
+    // The table gone, as a database that can't take the row
+    await api.database.execute("drop table analytics_events")
+
     const verified = await signIn(api)
     expect(verified.status).toBe(200)
-    expect(sent).toHaveLength(1)
+    expect(logged).toHaveBeenCalledWith(
+        "The sign-up's event wasn't recorded",
+        expect.objectContaining({ user_id: expect.any(String) })
+    )
 })

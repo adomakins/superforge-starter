@@ -13,24 +13,24 @@ import {
     keptVisitorId,
     rememberVisitor
 } from "./cookies"
+import { recordVisit } from "./record"
 
 /**
  * What visitors do on the site's pages, under /api/visits: the pages'
- * script (frontend/visitors/) posts its events here, never to Infra, so an
- * ad blocker sees nothing to block, and the key stays on the server. The
- * server sends them on with who the visitor is, what they answered and
- * where they are, and Infra decides by `context.var.visitor_mode`
- * (utilities/visitors.ts) whether the app remembers them, with the
+ * script (frontend/visitors/) posts its events here, to the site's own
+ * address, so an ad blocker sees nothing to block. The server adds who the
+ * visitor is, what they answered and where they are, keeps the events in
+ * its own database (record.ts), and decides by `context.var.visitor_mode`
+ * (utilities/visitors.ts) whether the site remembers them, with the
  * `visitor` cookie (cookies.ts), and whether their page asks them first
- * (backend/infra/README.md, "Events").
+ * (README.md).
  */
 export const visitRoutes = new Hono<ApiEnvironment>()
     // A batch of the page's events, `{ sent_at, events }`. Answers whether
     // the page asks the visitor, and sets, renews or clears their
-    // `visitor` cookie as Infra says. An Infra that's down or refuses the
-    // batch loses it, which is logged, and changes nothing on the browser:
-    // the page has nothing to do about it, and events sent twice are kept
-    // twice, so it isn't asked to send them again.
+    // `visitor` cookie by whether the site remembers them. A database
+    // that's down fails the batch (500), which the page sends again: it's
+    // kept whole or not at all.
     .post(
         "/visits",
         bodyLimit({
@@ -50,33 +50,22 @@ export const visitRoutes = new Hono<ApiEnvironment>()
             const mode = context.var.visitor_mode
             const kept_id = keptVisitorId(context)
             // The ID the cookie holds, or a new one, which the cookie holds
-            // once Infra says to remember them; none at all in `never`
+            // once the site remembers them; none at all in `never`
             const id =
                 mode === "never" ? null : (kept_id ?? crypto.randomUUID())
-            const sent = await context.var.infra.sendVisit({
+            const { remembered, ask } = await recordVisit(context.var, {
                 mode,
                 visitor: {
                     id,
                     consent: keptConsent(context),
-                    user: context.var.user?.id ?? null,
+                    user_id: context.var.user?.id ?? null,
                     ip: visitorIp(context),
                     user_agent: visitorUserAgent(context)
                 },
                 sent_at,
                 events
             })
-            if (!sent.ok) {
-                console.warn(
-                    "A page's events didn't reach Infra, and are lost",
-                    {
-                        reason: sent.error.reason,
-                        events: events.length
-                    }
-                )
-                return context.json({ ask: false }, 200)
-            }
 
-            const { remembered, ask } = sent.data
             if (remembered && id !== null) {
                 // Set, or renewed for another 400 days
                 rememberVisitor(context, id)
@@ -88,7 +77,7 @@ export const visitRoutes = new Hono<ApiEnvironment>()
     )
 
     // What the visitor answered the banner, kept in `visitor_consent`, which
-    // every batch after it sends Infra. Declining forgets their `visitor`
+    // every batch after it is decided by. Declining forgets their `visitor`
     // cookie at once; accepting lets the next batch's answer set it.
     .post(
         "/visits/consent",

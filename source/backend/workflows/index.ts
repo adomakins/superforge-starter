@@ -1,5 +1,6 @@
 import { JOBS } from "@/backend/jobs"
 import { tellTeamOfSignUp } from "@/backend/users/workflows"
+import { pruneAnalyticsRunner } from "@/backend/visits/prune"
 import type { Workflow } from "./define"
 import type { Runner } from "./runners"
 
@@ -27,4 +28,7 @@ export const WORKFLOWS: Workflow[] = [
  * few seconds, while this process runs the workflows. A feature's goes here
  * the moment it's defined.
  */
-export const RUNNERS: Runner[] = []
+export const RUNNERS: Runner[] = [
+    // Each hour, the analytics older than it's kept (backend/visits/)
+    pruneAnalyticsRunner
+]

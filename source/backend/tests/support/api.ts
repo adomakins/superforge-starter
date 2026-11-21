@@ -3,6 +3,7 @@ import { apiWith } from "@/backend"
 import type { Access, InternalUser } from "@/backend/auth/access"
 import type { ApiEnvironment } from "@/backend/context"
 import { standInInfra } from "@/backend/infra/stand-in"
+import type { Locate } from "@/backend/visits/location"
 import { recordedWorkflows } from "@/backend/workflows/tests/support/recorded"
 import { Storage } from "@/database/storage"
 import { testDatabase } from "@/database/tests/support/database"
@@ -18,13 +19,17 @@ const OPEN: Access = { sign_in: "anyone", internal_users: [] }
 // the template ships with, whatever this app's VISITOR_MODE says
 const REMEMBER: VisitorMode = "remember"
 
+// Where a visitor is, in a test unless it says otherwise: nowhere the
+// server can tell, as in a dev server, so no test downloads a database
+const NOWHERE: Locate = () => null
+
 /**
  * The whole API, as the server mounts it (`apiWith()`), on a database of
  * the test's own, the bucket's bytes in memory, workflows recorded rather
  * than run, Infra's stand-in, so no test reaches Infra (its sign-ins
- * answer their code, as a test key's do), anyone able to sign in, and
- * visitors remembered as the template ships (`remember`): what a route's
- * test calls, through the typed client
+ * answer their code, as a test key's do), anyone able to sign in,
+ * visitors remembered as the template ships (`remember`), and none of them
+ * placed: what a route's test calls, through the typed client
  * (`client.api.health.$get()`), or `api.request(path)` for a path no route
  * declares. Anything in `replacing` goes on `context` in place of the
  * test's own. Call it inside a test.
@@ -44,7 +49,8 @@ export async function testApi(
         workflows: replacing.workflows ?? recorded.workflows,
         infra: replacing.infra ?? standInInfra(),
         access: { sign_in: given.sign_in, internal_users },
-        visitor_mode: replacing.visitor_mode ?? REMEMBER
+        visitor_mode: replacing.visitor_mode ?? REMEMBER,
+        locate: replacing.locate ?? NOWHERE
     }
     const api = apiWith(() => variables)
     return {

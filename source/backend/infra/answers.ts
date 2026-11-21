@@ -70,36 +70,6 @@ export const verify_refused = z.union([
         .transform(() => ({ reason: "no-link" as const }))
 ])
 
-/** Events Infra took: how many it kept, none with a test key. */
-export const sent_events = z.object({ kept: z.number() })
-
-/** A page's events Infra took, and what it decided of their visitor. */
-export const sent_visit = z.object({
-    // How many it kept: none with a test key, nor of a bot
-    kept: z.number(),
-    // Whether the app remembers the visitor: sets or renews its `visitor`
-    // cookie when true, and clears it when false
-    remembered: z.boolean(),
-    // Whether the page asks the visitor before they're remembered
-    ask: z.boolean()
-})
-
-/**
- * Why Infra kept none of a call's events, the server's or a page's. Either
- * is a bug in what the app sent, so sending them again won't help.
- */
-export const events_refused = z.union([
-    // Not the call's shape: `fields` names what failed, like
-    // `events.0.name`
-    z
-        .object({ error: z.literal("invalid"), fields: z.array(z.string()) })
-        .transform(({ fields }) => ({ reason: "invalid" as const, fields })),
-    // Over the most a call's body can be, in bytes
-    z
-        .object({ error: z.literal("too-large"), limit: z.number() })
-        .transform(({ limit }) => ({ reason: "too-large" as const, limit }))
-])
-
 /** A comment Infra kept: its ID, and when. */
 export const kept_comment = z
     .object({
@@ -111,64 +81,16 @@ export const kept_comment = z
     .transform(({ comment }) => comment)
 
 /**
- * Why Infra didn't keep a comment: the same two refusals as events', each
- * a bug in what the app sent.
+ * Why Infra didn't keep a comment. Either is a bug in what the app sent,
+ * so sending it again won't help.
  */
-export const comment_refused = events_refused
-
-// One query's rows, with its columns, and whether there were more than the
-// 10,000 Infra answers
-const query_rows = z
-    .object({
-        columns: z.array(z.object({ name: z.string(), type: z.string() })),
-        rows: z.array(z.record(z.string(), z.unknown())),
-        truncated: z.boolean()
-    })
-    .transform((result) => ({ ok: true as const, data: result }))
-
-// Why one query has no rows: not one read (`one-select`), SQL DuckDB
-// couldn't run (`sql`, with its message), or too slow (`too-slow`). Kept as
-// a string, so a reason Infra adds later still reads.
-const query_failed = z
-    .object({
-        error: z.string(),
-        message: z.string().optional(),
-        seconds: z.number().optional()
-    })
-    .transform(({ error, message, seconds }) => ({
-        ok: false as const,
-        error: {
-            reason: error,
-            message:
-                message ??
-                (seconds === undefined
-                    ? error
-                    : `It ran past ${seconds} seconds and was stopped`)
-        }
-    }))
-
-/** What Infra read for a call's queries, and what each one answered. */
-export const queried = z.object({
-    window: z.object({
-        // How far back it read, ending now
-        since: z.iso.datetime().transform((value) => new Date(value)),
-        days: z.number(),
-        time_zone: z.string(),
-        // How many events it read
-        events: z.number()
-    }),
-    // Each query's rows, or why it has none, by the name the app gave it
-    results: z.record(z.string(), z.union([query_rows, query_failed]))
-})
-
-/** Why Infra ran none of a call's queries. */
-export const query_refused = z.union([
-    // Not the call's shape, which is a bug here
+export const comment_refused = z.union([
+    // Not the call's shape: `fields` names what failed, like `element.tag`
     z
         .object({ error: z.literal("invalid"), fields: z.array(z.string()) })
         .transform(({ fields }) => ({ reason: "invalid" as const, fields })),
-    // More events in the window than one call reads: ask for fewer days
+    // Over the most a call's body can be, in bytes
     z
-        .object({ error: z.literal("too-many-events"), most: z.number() })
-        .transform(({ most }) => ({ reason: "too-many-events" as const, most }))
+        .object({ error: z.literal("too-large"), limit: z.number() })
+        .transform(({ limit }) => ({ reason: "too-large" as const, limit }))
 ])

@@ -1,19 +1,17 @@
 # Visitors
 
-What visitors view, click and run into on the site's pages, sent to
-Superforge Infra as events. They show up on superforge.studio's
-dashboard, in the Infra tab (visitors, top pages, where people came
-from, errors, sign-ins), and in full to Claude through the Superforge
-MCP, which can answer an owner's questions about them. The app's server
-sends what only it knows through the Infra wrapper
-(`backend/infra/README.md`, "Events").
+What visitors view, click and run into on the site's pages, kept as
+events in the app's own database, where the site's own analytics reads
+them (`backend/visits/README.md` has what's kept, for how long, and how to
+read it). The app's server records what only it knows, like a sign-up,
+beside them.
 
 It's a small script of the app's own, not a third party's, and it **sends
 only to the app's own address**: `POST /api/visits`, same-origin, as
 JSON, like any call to the app's API. The app's server adds who the
-visitor is and sends the batch on to Infra with its key
-(`backend/visits/`). An ad blocker sees nothing to block: no other site
-is called, and no file, folder or address here holds `analytics`,
+visitor is and keeps the batch (`backend/visits/`): no other service
+sees it. An ad blocker sees nothing to block: no other site is called,
+and no file, folder or address the browser asks for holds `analytics`,
 `track`, `collect`, `pixel` or `beacon`.
 
 **The script keeps nothing on the device**: no ID, no visit, no answer
@@ -28,15 +26,13 @@ instead, which no script can read (below).
   (`routes/__root.tsx`), which never runs in the prerender, and every
   function here does nothing on the server.
 - **On every page, from the first visit.** Whether anything is kept is
-  the server's to decide, and Infra's: the script doesn't wait for an
-  Infra project or a key.
-- **A dev server sends to its own `/api/visits`**, like a build. With no
-  test key, Infra's stand-in answers it, keeps nothing and logs each batch
-  in the dev server's terminal; with a test key, Infra checks each batch
-  and keeps nothing (`backend/infra/README.md`, "Keys").
-- **A build** sends to its own `/api/visits` too, whose server sends to
-  Infra with `INFRA_SECRET_KEY`. Without the key, every batch is lost,
-  and the server's logs say so.
+  the server's to decide: the script waits for nothing, and needs no key
+  or account anywhere.
+- **A dev server keeps what its pages send** in the checkout's own
+  database, like a build in production's, so a report can be built on
+  real rows before it ships (`pnpm database:seed` adds sample visits).
+  It places no visitor, since only Railway names a location database
+  (`backend/visits/README.md`, "Where a visitor is").
 
 ## What's recorded
 
@@ -48,13 +44,13 @@ instead, which no script can read (below).
 | `error` | An uncaught error or rejected promise, ten a page at most   | `message`, and where: `source`, `line`, `column`                                                                                                                                                                                                                                     |
 
 Each has its page's path and when it happened, and nothing of who the
-visitor is: the server adds that. Infra works out their visits itself,
-a new one after 30 minutes with nothing happening. A page whose tab is
+visitor is: the server adds that, and works out their visits itself, a
+new one after 30 minutes with nothing happening. A page whose tab is
 hidden and comes back has a `leave` each time it's left, each with the
 time it was visible since the last; `scroll` is the deepest so far. A
 change to only the query or the fragment isn't a new page. Everything
-stays within Infra's limits: at most 32 properties, and a string of at
-most 1,000 characters.
+stays within what the server takes: at most 32 properties, and a string
+of at most 1,000 characters.
 
 A batch goes every five seconds while there's something to send, at
 most 100 events and 32 KB a call, and as the page hides, what's left goes
@@ -63,9 +59,9 @@ couldn't take (no network, or a 5xx while it's down or deploying) is
 tried again, waiting longer each time, up to five minutes, and once more
 with `keepalive` as the page hides; one it refused (a 4xx) is dropped. A
 page holds at most 500 waiting, in its memory, and drops the oldest past
-them: what hasn't gone when the page closes is lost. Once the app's
-server has a batch, it's never sent again: one Infra couldn't take is
-lost there, and logged, since events sent twice are kept twice.
+them: what hasn't gone when the page closes is lost. The server keeps a
+batch whole or not at all, so one it couldn't keep, like while its
+database is down, comes back as a 5xx and is sent again.
 
 ## What's never recorded
 
@@ -85,15 +81,17 @@ lost there, and logged, since events sent twice are kept twice.
   like the toolbar the business's own people see (`components/toolbar/`).
 - **Who's signed in, from the page.** The server adds their user ID to
   every batch from its own session (`backend/visits/routes.ts`), and
-  Infra keeps it only of a visitor it remembers.
+  keeps it only of a visitor the site remembers.
+- **The visitor's IP address or `User-Agent`.** The server reads their
+  country and what they're on from them, and keeps neither.
 
 ## Remembering a visitor
 
 **`VISITOR_MODE` in `source/utilities/visitors.ts` is the owner's
-choice**, which `START-HERE.md` asks about. The server sends it with
-every batch, and Infra applies it, by what the visitor answered and the
-country of their IP address, and answers whether the app remembers them
-and whether the page asks them:
+choice**, which `START-HERE.md` asks about. The server applies it to
+every batch, by what the visitor answered and the country of their IP
+address, and decides whether the site remembers them and whether the
+page asks them:
 
 | Mode                    | Remembered                                                                      | Asked                   | For                                  |
 | ----------------------- | ------------------------------------------------------------------------------- | ----------------------- | ------------------------------------ |
@@ -102,21 +100,23 @@ and whether the page asks them:
 | `ask`                   | Whoever accepted                                                                | Whoever hasn't answered | A business based in the EU           |
 | `never`                 | Nobody: the server sets no cookie                                               | Nobody                  |                                      |
 
-GDPR applies in the EU, the EEA and the UK. A dev server's visitors, and
-anyone else Infra can't place, are of an unknown country, so `ask-in-eu`
-asks them, and the stand-in, which places no one, treats it as `ask`.
+GDPR applies in the EU, the EEA and the UK. The country comes from the
+visitor's IP address, in a database the server downloads from DB-IP and
+holds itself, on Railway only (`backend/visits/README.md`, "Where a
+visitor is"). A dev server's visitors, and anyone else the server can't
+place, are of an unknown country, so `ask-in-eu` asks them.
 
 A remembered visitor is a lasting ID, a UUID, in the `visitor` cookie,
-which the server sets and renews with each batch Infra says to remember.
-Infra keeps their events under it, so their visits join up across days,
-with whoever they're signed in as and their IP address. A visitor who
-isn't remembered has no `visitor` cookie, and the server clears one they
-had: Infra counts them as one visitor a day, by a hash it forgets once
-the day is over, and keeps no user or address of theirs.
+which the server sets and renews with each batch of theirs. Their events
+are kept under it, so their visits join up across days, with whoever
+they're signed in as. A visitor who isn't remembered has no `visitor`
+cookie, and the server clears one they had: they're counted as one
+visitor a day, by a hash that can't be made again once the day is over,
+with no user beside it. Nobody's IP address is kept.
 
 | Cookie            | Holds                                             | Set by                                     |
 | ----------------- | ------------------------------------------------- | ------------------------------------------ |
-| `visitor`         | Their lasting ID, a UUID                          | `/api/visits`, when Infra says to remember |
+| `visitor`         | Their lasting ID, a UUID                          | `/api/visits`, for a visitor it remembers  |
 | `visitor_consent` | `given` or `declined`: their answer to the banner | `/api/visits/consent`, when they answer it |
 
 Both are `HttpOnly`, `SameSite=Lax`, `Path=/`, for 400 days (the longest
@@ -160,10 +160,11 @@ A name is lowercase words joined by hyphens, at most 64 characters, and
 not one of the four above; properties are flat, at most 32, each a
 string of at most 1,000 characters, a number, a boolean or null. One
 that doesn't fit is dropped with a warning in the console. They go like
-the script's own, for every visitor, and are kept under whoever Infra
-says the visitor is. What has to count even when a page can't send it,
-like a sign-up or a payment, the server sends (`backend/infra/`), as
-`backend/auth/routes.ts` sends `signed-up`.
+the script's own, for every visitor, and are kept under whoever the
+server says the visitor is. What has to count even when a page can't send
+it, like a sign-up or a payment, the server records itself (`recordEvents`
+in `backend/visits/record.ts`), as `backend/auth/routes.ts` records
+`signed-up`.
 
 ## In this folder
 

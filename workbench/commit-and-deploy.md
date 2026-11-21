@@ -310,14 +310,16 @@ When you're asked to ship, push the branch and open the PR with
 The server's configuration is Railway variables on the app's service,
 named in `.railway/railway.ts`: `DATABASE_URL` (a reference to the
 database's), the `Storage` bucket's S3 credentials as `STORAGE_*`
-(references to the bucket's), and any secret as `preserve()`, whose value
-the human sets in Railway's dashboard, like `INFRA_SECRET_KEY`, sign-in's
-key ("Setting up Railway", step 6). A new one goes in the file first,
+(references to the bucket's), `LOCATION_DATABASE` (which of DB-IP's
+databases places a visitor by their IP address,
+`source/backend/visits/README.md`), and any secret as `preserve()`, whose
+value the human sets in Railway's dashboard, like `INFRA_SECRET_KEY`,
+sign-in's key ("Setting up Railway", step 6). A new one goes in the file first,
 since the file owns every variable on the service (above), and a new
 secret is named in the PR so the human sets it before the merge. Never put a secret's value in the
 file, and never commit one: `.env*` is ignored for that reason.
 
 A dev server needs none of them: it uses the checkout's own Postgres,
 keeps files in the checkout's `.storage/` folder, signs in through Infra
-with a test key from the checkout's `.env`, or a stand-in without one, and
-reads anything else from the shell that started it.
+with a test key from the checkout's `.env`, or a stand-in without one,
+places no visitor, and reads anything else from the shell that started it.

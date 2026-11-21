@@ -203,16 +203,7 @@ function unavailableInfra(): Infra {
         async verifySignIn() {
             return unavailable
         },
-        async sendEvents() {
-            return unavailable
-        },
-        async sendVisit() {
-            return unavailable
-        },
         async fileComment() {
-            return unavailable
-        },
-        async query() {
             return unavailable
         },
         async passOAuth() {

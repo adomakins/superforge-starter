@@ -17,7 +17,7 @@ import { secureCookie } from "../auth/signed-in"
 //
 // | Cookie            | Holds                          | Set when                                 |
 // | ----------------- | ------------------------------ | ---------------------------------------- |
-// | `visitor`         | Their lasting ID, a UUID       | Infra says the app remembers them        |
+// | `visitor`         | Their lasting ID, a UUID       | The site remembers them (record.ts)      |
 // | `visitor_consent` | `given` or `declined`          | They answer the banner                   |
 
 const VISITOR = "visitor"

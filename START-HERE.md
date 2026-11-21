@@ -43,13 +43,13 @@ Ask for each of these. The answers go into PRODUCT.md and DESIGN.md (step
     see the whole dashboard (the people who can sign in, and the work
     running in the background) from the first time they sign in.
 13. **Where is the business based, and do you want visitors asked
-    before they're remembered?** Once the app is on Superforge Infra, its
-    pages count what visitors view and click, for the owner's dashboard,
-    and the site can remember a visitor's browser between visits, so their
-    visits join up. Say plainly: by default the site sets a lasting cookie
-    on every visitor, with no banner, and Infra keeps the IP address of
-    each visitor it remembers; the EU and the UK generally require a
-    visitor's consent for that. A business based in the EU can
+    before they're remembered?** The site's pages count what visitors
+    view and click, in the app's own database, and the site can remember
+    a visitor's browser between visits, so their visits join up. Say
+    plainly: by default the site sets a lasting cookie on every visitor,
+    with no banner, and keeps each visit with the country it came from,
+    never the visitor's IP address; the EU and the UK generally require a
+    visitor's consent for the cookie. A business based in the EU can
     have a small banner ask everyone first; one based elsewhere can have
     it ask only visitors where those rules apply, and remember everyone
     else; and one that wants nothing kept on anyone's browser can turn
